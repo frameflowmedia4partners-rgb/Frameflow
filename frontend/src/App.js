@@ -13,13 +13,15 @@ import IdeasPage from "@/pages/IdeasPage";
 import CreateContentPage from "@/pages/CreateContentPage";
 import MediaLibraryPage from "@/pages/MediaLibraryPage";
 import TemplatesPage from "@/pages/TemplatesPage";
-import CalendarPage from "@/pages/CalendarPage";
+import ContentSchedulerPage from "@/pages/ContentSchedulerPage";
 import HistoryPage from "@/pages/HistoryPage";
 import BrandProfilePage from "@/pages/BrandProfilePage";
 import ProjectPage from "@/pages/ProjectPage";
 import MarketingDashboard from "@/pages/MarketingDashboard";
 import CreateAdCampaign from "@/pages/CreateAdCampaign";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AnalyticsDashboard from "@/pages/AnalyticsDashboard";
+import IntegrationsPage from "@/pages/IntegrationsPage";
 
 // Protected Route component that uses AuthContext
 function ProtectedRoute({ children }) {
@@ -128,7 +130,15 @@ function AppRoutes() {
         path="/calendar"
         element={
           <ProtectedRoute>
-            <CalendarPage />
+            <ContentSchedulerPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scheduler"
+        element={
+          <ProtectedRoute>
+            <ContentSchedulerPage />
           </ProtectedRoute>
         }
       />
@@ -177,6 +187,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <AnalyticsDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/integrations"
+        element={
+          <ProtectedRoute>
+            <IntegrationsPage />
           </ProtectedRoute>
         }
       />

@@ -1,7 +1,10 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut, TrendingUp, Shield } from "lucide-react";
+import { 
+  Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, 
+  Calendar, History, Settings, LogOut, TrendingUp, Shield, BarChart3, Link2, Target 
+} from "lucide-react";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
@@ -20,16 +23,31 @@ export default function Layout({ children }) {
     { path: "/admin", icon: Shield, label: "Admin Dashboard", testid: "nav-admin" },
   ];
 
-  // Regular user navigation items
+  // Regular user navigation items - organized by category
   const userNavItems = [
+    // Core
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
+    
+    // Content Creation
     { path: "/ideas", icon: Sparkles, label: "Idea Engine", testid: "nav-ideas" },
-    { path: "/projects", icon: FolderKanban, label: "Projects", testid: "nav-projects" },
     { path: "/create", icon: Sparkles, label: "Create Content", testid: "nav-create" },
-    { path: "/marketing", icon: TrendingUp, label: "Marketing", testid: "nav-marketing" },
-    { path: "/media", icon: Image, label: "Media Library", testid: "nav-media-lib" },
     { path: "/templates", icon: LayoutIcon, label: "Templates", testid: "nav-templates" },
-    { path: "/calendar", icon: History, label: "Calendar", testid: "nav-calendar" },
+    
+    // Media & Assets
+    { path: "/media", icon: Image, label: "Media Library", testid: "nav-media-lib" },
+    { path: "/projects", icon: FolderKanban, label: "Campaigns", testid: "nav-projects" },
+    
+    // Scheduling & Calendar
+    { path: "/calendar", icon: Calendar, label: "Scheduler", testid: "nav-calendar" },
+    
+    // Marketing & Ads
+    { path: "/marketing", icon: Target, label: "Ad Campaigns", testid: "nav-marketing" },
+    { path: "/analytics", icon: BarChart3, label: "Analytics", testid: "nav-analytics" },
+    
+    // Integrations
+    { path: "/integrations", icon: Link2, label: "Integrations", testid: "nav-integrations" },
+    
+    // History & Settings
     { path: "/history", icon: History, label: "History", testid: "nav-history" },
     { path: "/brand", icon: Settings, label: "Café Settings", testid: "nav-brand-settings" }
   ];

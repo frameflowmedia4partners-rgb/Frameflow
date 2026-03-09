@@ -1469,6 +1469,86 @@ async def launch_ad_campaign(campaign_id: str, current_user: dict = Depends(get_
 
 app.include_router(api_router)
 
+# ==================== SCHEDULED POSTS ENDPOINTS ====================
+
+class ScheduledPostRequest(BaseModel):
+    content_type: str
+    caption: str
+    media_id: Optional[str] = None
+    scheduled_at: str
+    platform: str = "instagram"
+    brand_id: Optional[str] = None
+
+@api_router.get("/scheduled-posts")
+async def get_scheduled_posts(current_user: dict = Depends(get_current_user)):
+    """Get all scheduled posts for the user"""
+    posts = await db.scheduled_posts.find(
+        {"user_id": current_user["user_id"]},
+        {"_id": 0}
+    ).sort("scheduled_at", 1).to_list(500)
+    return posts
+
+@api_router.post("/scheduled-posts")
+async def create_scheduled_post(request: ScheduledPostRequest, current_user: dict = Depends(get_current_user)):
+    """Create a new scheduled post"""
+    post_id = str(uuid.uuid4())
+    post_doc = {
+        "id": post_id,
+        "user_id": current_user["user_id"],
+        "brand_id": request.brand_id,
+        "content_type": request.content_type,
+        "caption": request.caption,
+        "media_id": request.media_id,
+        "scheduled_at": request.scheduled_at,
+        "platform": request.platform,
+        "status": "scheduled",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.scheduled_posts.insert_one(post_doc)
+    return {"success": True, "post_id": post_id}
+
+@api_router.get("/scheduled-posts/{post_id}")
+async def get_scheduled_post(post_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific scheduled post"""
+    post = await db.scheduled_posts.find_one(
+        {"id": post_id, "user_id": current_user["user_id"]},
+        {"_id": 0}
+    )
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+@api_router.put("/scheduled-posts/{post_id}")
+async def update_scheduled_post(post_id: str, request: ScheduledPostRequest, current_user: dict = Depends(get_current_user)):
+    """Update a scheduled post"""
+    result = await db.scheduled_posts.update_one(
+        {"id": post_id, "user_id": current_user["user_id"]},
+        {"$set": {
+            "content_type": request.content_type,
+            "caption": request.caption,
+            "media_id": request.media_id,
+            "scheduled_at": request.scheduled_at,
+            "platform": request.platform,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"success": True}
+
+@api_router.delete("/scheduled-posts/{post_id}")
+async def delete_scheduled_post(post_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a scheduled post"""
+    result = await db.scheduled_posts.delete_one(
+        {"id": post_id, "user_id": current_user["user_id"]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return {"success": True}
+
+# ==================== END SCHEDULED POSTS ENDPOINTS ====================
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
