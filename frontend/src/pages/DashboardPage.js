@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
+import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, Image, Video, FileText, LogOut, Settings, Library } from "lucide-react";
+import { Plus, Image, Video, FileText, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [brands, setBrands] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [recentContent, setRecentContent] = useState([]);
   const [stats, setStats] = useState({ brands: 0, projects: 0, contents_generated: 0 });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -32,6 +34,14 @@ export default function DashboardPage() {
       setBrands(brandsRes.data);
       setProjects(projectsRes.data);
       setStats(statsRes.data);
+
+      if (projectsRes.data.length > 0) {
+        const recentProject = projectsRes.data[0];
+        const contentsRes = await axios.get(`${API}/contents/${recentProject.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setRecentContent(contentsRes.data.slice(0, 3));
+      }
     } catch (error) {
       toast.error("Failed to load dashboard");
     } finally {
@@ -39,65 +49,21 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-bounce-slow">
-          <Bot className="w-12 h-12 text-indigo-600" />
+      <Layout>
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-bounce-slow">
+            <TrendingUp className="w-12 h-12 text-indigo-600" />
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200 px-6 py-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-outfit text-xl font-bold text-slate-900">FrameFlow</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              data-testid="nav-media-btn"
-              onClick={() => navigate("/media")}
-              variant="ghost"
-              className="rounded-lg px-4 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium transition-colors"
-            >
-              <Library className="w-4 h-4 mr-2" />
-              Media
-            </Button>
-            <Button
-              data-testid="nav-brand-btn"
-              onClick={() => navigate("/brand")}
-              variant="ghost"
-              className="rounded-lg px-4 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium transition-colors"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Brand
-            </Button>
-            <Button
-              data-testid="nav-logout-btn"
-              onClick={handleLogout}
-              variant="ghost"
-              className="rounded-lg px-4 py-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto p-6 md:p-8">
+    <Layout>
+      <div className="p-8">
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold font-outfit text-slate-900 mb-2">
             Welcome back, {user?.full_name || "Creator"}!
@@ -110,7 +76,7 @@ export default function DashboardPage() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
             <div className="relative z-10">
               <div className="inline-block w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-6">
-                <Bot className="w-8 h-8 text-white" />
+                <Plus className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-3xl font-bold font-outfit text-white mb-2">Ready to Create?</h2>
               <p className="text-white/90 mb-8 text-lg">Start a new project and bring your ideas to life with AI</p>
@@ -162,7 +128,6 @@ export default function DashboardPage() {
               ))}
               {projects.length === 0 && (
                 <div className="text-center py-8 text-slate-500">
-                  <Bot className="w-12 h-12 mx-auto mb-2 text-slate-300" />
                   <p>No projects yet. Create your first one!</p>
                 </div>
               )}
@@ -175,7 +140,33 @@ export default function DashboardPage() {
             <p className="text-slate-600">Total pieces of content created</p>
           </div>
         </div>
-      </main>
-    </div>
+
+        {brands.length > 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+            <h3 className="text-xl font-semibold font-outfit text-slate-900 mb-4">Your Brand</h3>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                <span className="text-2xl font-bold text-indigo-600">
+                  {brands[0].name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-lg text-slate-900">{brands[0].name}</h4>
+                <p className="text-sm text-slate-600 capitalize">
+                  {brands[0].tone || "Professional"} • {brands[0].industry || "General"}
+                </p>
+              </div>
+              <Button
+                onClick={() => navigate("/brand")}
+                variant="outline"
+                className="rounded-lg"
+              >
+                Edit Brand
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
   );
 }

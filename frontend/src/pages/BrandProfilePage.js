@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
+import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bot, ArrowLeft, Save } from "lucide-react";
+import { Bot, Save } from "lucide-react";
 import { toast } from "sonner";
 
 export default function BrandProfilePage() {
@@ -60,86 +61,69 @@ export default function BrandProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <Button
-            data-testid="back-btn"
-            onClick={() => navigate("/dashboard")}
-            variant="ghost"
-            className="rounded-lg"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-outfit text-xl font-bold text-slate-900">Brand Profile</span>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-3xl mx-auto p-6 md:p-8">
+    <Layout>
+      <div className="p-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Brand Profile</h1>
-          <p className="text-lg text-slate-600">Manage your brand information</p>
+          <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Brand Settings</h1>
+          <p className="text-lg text-slate-600">Manage your brand information and preferences</p>
         </div>
 
         {selectedBrand ? (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
-            <div className="space-y-6">
-              <div>
-                <Label htmlFor="name" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Brand Name
-                </Label>
-                <Input
-                  data-testid="brand-name-input"
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
-                  placeholder="My Brand"
-                />
-              </div>
+          <div className="max-w-2xl">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="name" className="text-sm font-semibold text-slate-700 mb-2 block">
+                    Brand Name
+                  </Label>
+                  <Input
+                    data-testid="brand-name-input"
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                    placeholder="My Brand"
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="tone" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Brand Tone
-                </Label>
-                <Input
-                  data-testid="brand-tone-input"
-                  id="tone"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
-                  placeholder="Professional, Friendly, Playful..."
-                />
-              </div>
+                <div>
+                  <Label htmlFor="tone" className="text-sm font-semibold text-slate-700 mb-2 block">
+                    Brand Tone
+                  </Label>
+                  <Input
+                    data-testid="brand-tone-input"
+                    id="tone"
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                    placeholder="Professional, Friendly, Playful..."
+                  />
+                </div>
 
-              <div>
-                <Label htmlFor="industry" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Industry
-                </Label>
-                <Input
-                  data-testid="brand-industry-input"
-                  id="industry"
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
-                  placeholder="Restaurant, Tech, Fashion..."
-                />
-              </div>
+                <div>
+                  <Label htmlFor="industry" className="text-sm font-semibold text-slate-700 mb-2 block">
+                    Industry
+                  </Label>
+                  <Input
+                    data-testid="brand-industry-input"
+                    id="industry"
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                    placeholder="Restaurant, Tech, Fashion..."
+                  />
+                </div>
 
-              <Button
-                data-testid="save-brand-btn"
-                onClick={handleSave}
-                disabled={loading}
-                className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
-              >
-                <Save className="w-5 h-5 mr-2" />
-                {loading ? "Saving..." : "Save Changes"}
-              </Button>
+                <Button
+                  data-testid="save-brand-btn"
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
+                >
+                  <Save className="w-5 h-5 mr-2" />
+                  {loading ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
@@ -157,7 +141,7 @@ export default function BrandProfilePage() {
             </Button>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </Layout>
   );
 }

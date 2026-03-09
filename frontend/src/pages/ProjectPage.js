@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
+import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Bot, ArrowLeft, Image, Video, FileText } from "lucide-react";
+import { Bot, Image, Video, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProjectPage() {
@@ -36,36 +37,19 @@ export default function ProjectPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-bounce-slow">
-          <Bot className="w-12 h-12 text-indigo-600" />
+      <Layout>
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-bounce-slow">
+            <Bot className="w-12 h-12 text-indigo-600" />
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <Button
-            data-testid="back-btn"
-            onClick={() => navigate("/dashboard")}
-            variant="ghost"
-            className="rounded-lg"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <span className="font-outfit text-xl font-bold text-slate-900">{project?.name}</span>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto p-6 md:p-8">
+    <Layout>
+      <div className="p-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">{project?.name}</h1>
           <p className="text-lg text-slate-600 capitalize">{project?.type} Project</p>
@@ -114,7 +98,7 @@ export default function ProjectPage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </Layout>
   );
 }

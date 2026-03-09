@@ -363,6 +363,84 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         "contents_generated": contents_count
     }
 
+@api_router.post("/media/upload")
+async def upload_media(file_name: str, file_data: str, file_type: str, brand_id: str, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": brand_id, "user_id": current_user["user_id"]})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    media_id = str(uuid.uuid4())
+    media_doc = {
+        "id": media_id,
+        "brand_id": brand_id,
+        "name": file_name,
+        "type": file_type,
+        "url": file_data,
+        "size": len(file_data),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.media_assets.insert_one(media_doc)
+    media_doc.pop("_id", None)
+    return media_doc
+
+@api_router.get("/media")
+async def get_media(brand_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if brand_id:
+        brand = await db.brands.find_one({"id": brand_id, "user_id": current_user["user_id"]})
+        if not brand:
+            raise HTTPException(status_code=404, detail="Brand not found")
+        query["brand_id"] = brand_id
+    else:
+        user_brands = await db.brands.find({"user_id": current_user["user_id"]}, {"id": 1, "_id": 0}).to_list(100)
+        brand_ids = [b["id"] for b in user_brands]
+        query["brand_id"] = {"$in": brand_ids}
+    
+    media = await db.media_assets.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return media
+
+@api_router.delete("/media/{media_id}")
+async def delete_media(media_id: str, current_user: dict = Depends(get_current_user)):
+    media = await db.media_assets.find_one({"id": media_id}, {"_id": 0})
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    brand = await db.brands.find_one({"id": media["brand_id"], "user_id": current_user["user_id"]})
+    if not brand:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.media_assets.delete_one({"id": media_id})
+    return {"success": True}
+
+@api_router.post("/contents/{content_id}/edit")
+async def edit_content(content_id: str, edit_prompt: str, current_user: dict = Depends(get_current_user)):
+    content = await db.generated_contents.find_one({"id": content_id}, {"_id": 0})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    if content["type"] == "caption":
+        system_message = f"You are an expert content editor. Apply the following edit instruction: {edit_prompt}"
+        original_caption = content["content_text"]
+        
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=str(uuid.uuid4()),
+            system_message=system_message
+        ).with_model("openai", "gpt-5.2")
+        
+        user_message = UserMessage(text=f"Original caption:\n{original_caption}\n\nEdit instruction: {edit_prompt}")
+        edited_caption = await chat.send_message(user_message)
+        
+        await db.generated_contents.update_one(
+            {"id": content_id},
+            {"$set": {"content_text": edited_caption}}
+        )
+        
+        return {"edited_content": edited_caption, "content_id": content_id}
+    
+    raise HTTPException(status_code=400, detail="Only captions can be edited currently")
+
 app.include_router(api_router)
 
 app.add_middleware(
