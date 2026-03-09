@@ -30,40 +30,8 @@ export default function TemplatesPage() {
   const handleUseTemplate = (template) => {
     localStorage.setItem("selectedTemplate", JSON.stringify(template));
     navigate("/create");
-    toast.success("Template selected! Fill in your details.");
+    toast.success("Template selected! Customize and generate.");
   };
-
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case "image": return <Image className="w-6 h-6" />;
-      case "video": return <Video className="w-6 h-6" />;
-      default: return <FileText className="w-6 h-6" />;
-    }
-  };
-
-  const templateDetails = [
-    {
-      id: "restaurant-promo",
-      prompt: "Create an engaging social media post promoting our daily special: [dish name]. Highlight fresh ingredients and limited availability. Tone: appetizing and urgent."
-    },
-    {
-      id: "cafe-reel",
-      prompt: "Generate a cozy cafe video concept showcasing our coffee-making process. Include shots of latte art, warm ambiance, and happy customers. Tone: warm and inviting."
-    },
-    {
-      id: "product-launch",
-      prompt: "Announce our new product launch: [product name]. Emphasize innovation, benefits, and exclusive early access. Tone: exciting and professional."
-    },
-    {
-      id: "service-ad",
-      prompt: "Promote our service: [service name]. Focus on solving customer pain points, showcasing results, and including a clear call-to-action. Tone: helpful and trustworthy."
-    }
-  ];
-
-  const enhancedTemplates = templates.map(t => ({
-    ...t,
-    ...templateDetails.find(td => td.id === t.id)
-  }));
 
   return (
     <Layout>
@@ -74,7 +42,7 @@ export default function TemplatesPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {enhancedTemplates.map((template) => (
+          {templates.map((template) => (
             <div
               key={template.id}
               data-testid={`template-card-${template.id}`}

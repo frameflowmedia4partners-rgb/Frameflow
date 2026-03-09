@@ -89,6 +89,22 @@ class CalendarRequest(BaseModel):
     brand_id: str
     days: int = 7
 
+class PlatformContentRequest(BaseModel):
+    prompt: str
+    brand_id: str
+    platform: str
+    content_type: str
+
+class RepurposeContentRequest(BaseModel):
+    source_content: str
+    brand_id: str
+    source_type: str
+
+class BatchGenerateRequest(BaseModel):
+    brand_id: str
+    count: int
+    content_type: str
+
 @api_router.post("/auth/signup", response_model=AuthResponse)
 async def signup(request: SignupRequest):
     existing_user = await db.users.find_one({"email": request.email})
@@ -342,28 +358,96 @@ async def get_templates():
             "name": "Restaurant Promotion",
             "description": "Promote your daily specials and menu items",
             "type": "image",
-            "category": "restaurant"
+            "category": "restaurant",
+            "prompt": "Create an engaging social media post promoting our daily special: [dish name]. Highlight fresh ingredients and limited availability. Tone: appetizing and urgent."
         },
         {
             "id": "cafe-reel",
             "name": "Cafe Reel",
             "description": "Showcase your coffee and ambiance",
             "type": "video",
-            "category": "cafe"
+            "category": "cafe",
+            "prompt": "Generate a cozy cafe video concept showcasing our coffee-making process. Include shots of latte art, warm ambiance, and happy customers. Tone: warm and inviting."
         },
         {
             "id": "product-launch",
             "name": "Product Launch",
             "description": "Announce your new product with style",
             "type": "image",
-            "category": "product"
+            "category": "product",
+            "prompt": "Announce our new product launch: [product name]. Emphasize innovation, benefits, and exclusive early access. Tone: exciting and professional."
         },
         {
             "id": "service-ad",
             "name": "Service Ad",
             "description": "Promote your services effectively",
             "type": "video",
-            "category": "service"
+            "category": "service",
+            "prompt": "Promote our service: [service name]. Focus on solving customer pain points, showcasing results, and including a clear call-to-action. Tone: helpful and trustworthy."
+        },
+        {
+            "id": "limited-promo",
+            "name": "Limited-Time Promotion",
+            "description": "Create urgency with time-sensitive offers",
+            "type": "image",
+            "category": "promotion",
+            "prompt": "Create a limited-time promotion post. Emphasize scarcity, deadline, and exclusive benefits. Include clear CTA and sense of urgency."
+        },
+        {
+            "id": "educational",
+            "name": "Educational Content",
+            "description": "Share valuable knowledge with your audience",
+            "type": "caption",
+            "category": "education",
+            "prompt": "Create educational content about [topic]. Break down complex information into digestible tips. Add value and position brand as expert."
+        },
+        {
+            "id": "behind-scenes",
+            "name": "Behind-the-Scenes",
+            "description": "Show the human side of your brand",
+            "type": "video",
+            "category": "storytelling",
+            "prompt": "Create behind-the-scenes content showing our team, process, or daily operations. Build authentic connection with audience."
+        },
+        {
+            "id": "testimonial",
+            "name": "Customer Testimonial",
+            "description": "Showcase customer success stories",
+            "type": "image",
+            "category": "social-proof",
+            "prompt": "Create a customer testimonial post featuring real feedback. Highlight transformation, results, and emotional impact."
+        },
+        {
+            "id": "seasonal",
+            "name": "Seasonal Promotion",
+            "description": "Leverage seasonal trends and holidays",
+            "type": "image",
+            "category": "seasonal",
+            "prompt": "Create seasonal content for [holiday/season]. Connect product/service to seasonal themes and emotions."
+        },
+        {
+            "id": "announcement",
+            "name": "Brand Announcement",
+            "description": "Share important brand news",
+            "type": "caption",
+            "category": "news",
+            "prompt": "Make an official brand announcement about [news]. Build excitement, explain benefits, and include next steps."
+        },
+        {
+            "id": "event-promo",
+            "name": "Event Promotion",
+            "description": "Drive attendance to your events",
+            "type": "image",
+            "category": "event",
+            "prompt": "Promote upcoming event: [event name]. Include date, location, what to expect, and registration link. Create FOMO."
+        },
+        {
+            "id": "engagement",
+            "name": "Engagement Post",
+            "description": "Boost interaction with your audience",
+            "type": "caption",
+            "category": "engagement",
+            "prompt": "Create an engaging post that asks questions, runs polls, or encourages comments. Make it fun and interactive."
         }
     ]
     return templates
@@ -634,6 +718,149 @@ Format as a structured list."""
     calendar = await chat.send_message(UserMessage(text=prompt))
     
     return {"calendar": calendar, "days": request.days}
+
+@api_router.post("/generate/platform-content")
+async def generate_platform_content(request: PlatformContentRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Brand: {brand.get('name')}, Tone: {brand.get('tone', 'professional')}, Industry: {brand.get('industry')}"""
+    
+    platform_prompts = {
+        "instagram": "Create an Instagram post with engaging caption and 5-10 relevant hashtags.",
+        "tiktok": "Create a TikTok video concept with a hook, main content description, and trending hashtag suggestions.",
+        "youtube": "Create YouTube Short content with attention-grabbing title, description, and video concept.",
+        "linkedin": "Create a professional LinkedIn post with value-driven content and call-to-action.",
+        "twitter": "Create a Twitter/X thread with 3-5 tweets, each tweet under 280 characters."
+    }
+    
+    platform_instruction = platform_prompts.get(request.platform, platform_prompts["instagram"])
+    
+    full_prompt = f"""{brand_context}
+
+Topic: {request.prompt}
+Platform: {request.platform}
+Content Type: {request.content_type}
+
+{platform_instruction}
+
+Format the output clearly with sections."""
+    
+    chat = LlmChat(
+        api_key=os.environ['EMERGENT_LLM_KEY'],
+        session_id=str(uuid.uuid4()),
+        system_message="You are a platform-specific content creator expert."
+    ).with_model("openai", "gpt-5.2")
+    
+    content = await chat.send_message(UserMessage(text=full_prompt))
+    
+    content_id = str(uuid.uuid4())
+    content_doc = {
+        "id": content_id,
+        "brand_id": request.brand_id,
+        "type": "platform_content",
+        "platform": request.platform,
+        "prompt": request.prompt,
+        "content_text": content,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.generated_contents.insert_one(content_doc)
+    
+    return {"content": content, "platform": request.platform, "content_id": content_id}
+
+@api_router.post("/generate/repurpose")
+async def repurpose_content(request: RepurposeContentRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Brand: {brand.get('name')}, Tone: {brand.get('tone')}, Industry: {brand.get('industry')}"""
+    
+    platforms = ["instagram", "tiktok", "youtube", "linkedin", "twitter"]
+    repurposed_content = {}
+    
+    for platform in platforms:
+        platform_prompts = {
+            "instagram": "Adapt this for Instagram with engaging caption and hashtags.",
+            "tiktok": "Adapt this for TikTok with hook and trending format.",
+            "youtube": "Adapt this for YouTube Short with title and description.",
+            "linkedin": "Adapt this for LinkedIn with professional tone.",
+            "twitter": "Adapt this for Twitter/X as a thread (3-5 tweets)."
+        }
+        
+        prompt = f"""{brand_context}
+
+Original content: {request.source_content}
+
+{platform_prompts[platform]}
+
+Keep the core message but optimize for {platform}."""
+        
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=str(uuid.uuid4()),
+            system_message="You are a content repurposing expert."
+        ).with_model("openai", "gpt-5.2")
+        
+        adapted_content = await chat.send_message(UserMessage(text=prompt))
+        repurposed_content[platform] = adapted_content
+        
+        content_id = str(uuid.uuid4())
+        content_doc = {
+            "id": content_id,
+            "brand_id": request.brand_id,
+            "type": "repurposed_content",
+            "platform": platform,
+            "source_content": request.source_content,
+            "content_text": adapted_content,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.generated_contents.insert_one(content_doc)
+    
+    return {"repurposed_content": repurposed_content}
+
+@api_router.post("/generate/batch")
+async def batch_generate_content(request: BatchGenerateRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Brand: {brand.get('name')}, Tone: {brand.get('tone')}, Industry: {brand.get('industry')}"""
+    
+    prompt = f"""{brand_context}
+
+Generate {request.count} unique {request.content_type} ideas for this brand.
+
+Each should be:
+- Different from the others
+- Aligned with brand tone
+- Engaging and creative
+- Platform-ready
+
+Format as a numbered list with clear separation."""
+    
+    chat = LlmChat(
+        api_key=os.environ['EMERGENT_LLM_KEY'],
+        session_id=str(uuid.uuid4()),
+        system_message="You are a content strategist creating diverse marketing content."
+    ).with_model("openai", "gpt-5.2")
+    
+    batch_content = await chat.send_message(UserMessage(text=prompt))
+    
+    content_id = str(uuid.uuid4())
+    content_doc = {
+        "id": content_id,
+        "brand_id": request.brand_id,
+        "type": "batch_content",
+        "content_type": request.content_type,
+        "count": request.count,
+        "content_text": batch_content,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.generated_contents.insert_one(content_doc)
+    
+    return {"batch_content": batch_content, "count": request.count, "content_id": content_id}
 
 app.include_router(api_router)
 
