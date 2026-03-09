@@ -15,10 +15,12 @@ export default function Layout({ children }) {
 
   const navItems = [
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
+    { path: "/ideas", icon: Sparkles, label: "Idea Engine", testid: "nav-ideas" },
     { path: "/projects", icon: FolderKanban, label: "Projects", testid: "nav-projects" },
     { path: "/create", icon: Sparkles, label: "Create Content", testid: "nav-create" },
     { path: "/media", icon: Image, label: "Media Library", testid: "nav-media-lib" },
     { path: "/templates", icon: LayoutIcon, label: "Templates", testid: "nav-templates" },
+    { path: "/calendar", icon: History, label: "Calendar", testid: "nav-calendar" },
     { path: "/history", icon: History, label: "History", testid: "nav-history" },
     { path: "/brand", icon: Settings, label: "Brand Settings", testid: "nav-brand-settings" }
   ];

@@ -7,9 +7,11 @@ import AuthPage from "@/pages/AuthPage";
 import OnboardingPage from "@/pages/OnboardingPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import IdeasPage from "@/pages/IdeasPage";
 import CreateContentPage from "@/pages/CreateContentPage";
 import MediaLibraryPage from "@/pages/MediaLibraryPage";
 import TemplatesPage from "@/pages/TemplatesPage";
+import CalendarPage from "@/pages/CalendarPage";
 import HistoryPage from "@/pages/HistoryPage";
 import BrandProfilePage from "@/pages/BrandProfilePage";
 import ProjectPage from "@/pages/ProjectPage";
@@ -51,6 +53,14 @@ function App() {
             }
           />
           <Route
+            path="/ideas"
+            element={
+              <ProtectedRoute>
+                <IdeasPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/projects"
             element={
               <ProtectedRoute>
@@ -79,6 +89,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TemplatesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <CalendarPage />
               </ProtectedRoute>
             }
           />

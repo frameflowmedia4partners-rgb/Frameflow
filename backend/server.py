@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone
 import base64
 import asyncio
+import requests
+from bs4 import BeautifulSoup
 from auth import hash_password, verify_password, create_access_token, get_current_user
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
@@ -69,6 +71,23 @@ class GenerateVideoRequest(BaseModel):
     project_id: Optional[str] = None
     duration: int = 4
     size: str = "1280x720"
+
+class AnalyzeBrandRequest(BaseModel):
+    website_url: str
+    brand_id: str
+
+class GenerateIdeaRequest(BaseModel):
+    brand_id: str
+    idea_type: str = "general"
+
+class SaveIdeaRequest(BaseModel):
+    brand_id: str
+    idea_text: str
+    idea_type: str
+
+class CalendarRequest(BaseModel):
+    brand_id: str
+    days: int = 7
 
 @api_router.post("/auth/signup", response_model=AuthResponse)
 async def signup(request: SignupRequest):
@@ -440,6 +459,181 @@ async def edit_content(content_id: str, edit_prompt: str, current_user: dict = D
         return {"edited_content": edited_caption, "content_id": content_id}
     
     raise HTTPException(status_code=400, detail="Only captions can be edited currently")
+
+@api_router.post("/brands/{brand_id}/analyze")
+async def analyze_brand_website(brand_id: str, request: AnalyzeBrandRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": brand_id, "user_id": current_user["user_id"]})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    try:
+        response = requests.get(request.website_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        text_content = soup.get_text()
+        text_content = ' '.join(text_content.split())[:5000]
+        
+        meta_description = soup.find('meta', attrs={'name': 'description'})
+        meta_desc = meta_description['content'] if meta_description else ""
+        
+        analysis_prompt = f"""Analyze this brand's website and extract key marketing information:
+
+Website URL: {request.website_url}
+Meta Description: {meta_desc}
+Content Sample: {text_content[:2000]}
+
+Extract and provide:
+1. Brand Tone (professional, casual, playful, etc.)
+2. Value Proposition (what makes them unique)
+3. Target Audience (who are their customers)
+4. Key Selling Points (3-5 points)
+5. Marketing Angles (3-5 potential angles for content)
+6. Keywords (10 relevant keywords)
+
+Format as JSON."""
+        
+        chat = LlmChat(
+            api_key=os.environ['EMERGENT_LLM_KEY'],
+            session_id=str(uuid.uuid4()),
+            system_message="You are a brand analysis expert. Analyze websites and extract marketing insights in JSON format."
+        ).with_model("openai", "gpt-5.2")
+        
+        analysis = await chat.send_message(UserMessage(text=analysis_prompt))
+        
+        import json
+        try:
+            analysis_data = json.loads(analysis)
+        except:
+            analysis_data = {"raw_analysis": analysis}
+        
+        await db.brands.update_one(
+            {"id": brand_id},
+            {"$set": {
+                "website_url": request.website_url,
+                "brand_analysis": analysis_data,
+                "analyzed_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        return {"success": True, "analysis": analysis_data}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze website: {str(e)}")
+
+@api_router.post("/ideas/generate")
+async def generate_idea(request: GenerateIdeaRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Brand: {brand.get('name')}
+Industry: {brand.get('industry', 'general')}
+Tone: {brand.get('tone', 'professional')}"""
+    
+    if brand.get('brand_analysis'):
+        analysis = brand['brand_analysis']
+        brand_context += f"""
+Value Proposition: {analysis.get('Value Proposition', '')}
+Target Audience: {analysis.get('Target Audience', '')}"""
+    
+    idea_prompts = {
+        "ad_hook": "Generate a compelling ad hook that grabs attention in the first 3 seconds.",
+        "social_post": "Generate a creative social media post idea that drives engagement.",
+        "storytelling": "Generate a storytelling angle that connects emotionally with the audience.",
+        "campaign": "Generate a complete marketing campaign idea with theme and execution plan.",
+        "promotion": "Generate a product promotion angle that highlights unique benefits.",
+        "general": "Generate a creative marketing idea for social media content."
+    }
+    
+    prompt_text = idea_prompts.get(request.idea_type, idea_prompts["general"])
+    
+    chat = LlmChat(
+        api_key=os.environ['EMERGENT_LLM_KEY'],
+        session_id=str(uuid.uuid4()),
+        system_message=f"You are a creative marketing strategist. Generate innovative marketing ideas. {brand_context}"
+    ).with_model("openai", "gpt-5.2")
+    
+    idea = await chat.send_message(UserMessage(text=prompt_text))
+    
+    idea_id = str(uuid.uuid4())
+    idea_doc = {
+        "id": idea_id,
+        "brand_id": request.brand_id,
+        "idea_type": request.idea_type,
+        "idea_text": idea,
+        "status": "generated",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    return {"idea_id": idea_id, "idea_text": idea, "idea_type": request.idea_type}
+
+@api_router.post("/ideas/save")
+async def save_idea(request: SaveIdeaRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    idea_id = str(uuid.uuid4())
+    idea_doc = {
+        "id": idea_id,
+        "brand_id": request.brand_id,
+        "idea_type": request.idea_type,
+        "idea_text": request.idea_text,
+        "status": "saved",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.ideas.insert_one(idea_doc)
+    return {"success": True, "idea_id": idea_id}
+
+@api_router.get("/ideas")
+async def get_ideas(brand_id: Optional[str] = None, status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    
+    if brand_id:
+        brand = await db.brands.find_one({"id": brand_id, "user_id": current_user["user_id"]})
+        if not brand:
+            raise HTTPException(status_code=404, detail="Brand not found")
+        query["brand_id"] = brand_id
+    else:
+        user_brands = await db.brands.find({"user_id": current_user["user_id"]}, {"id": 1, "_id": 0}).to_list(100)
+        brand_ids = [b["id"] for b in user_brands]
+        query["brand_id"] = {"$in": brand_ids}
+    
+    if status:
+        query["status"] = status
+    
+    ideas = await db.ideas.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return ideas
+
+@api_router.post("/calendar/generate")
+async def generate_content_calendar(request: CalendarRequest, current_user: dict = Depends(get_current_user)):
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Brand: {brand.get('name')}
+Industry: {brand.get('industry', 'general')}
+Tone: {brand.get('tone', 'professional')}"""
+    
+    prompt = f"""Create a {request.days}-day content calendar for this brand with daily post ideas.
+For each day, suggest:
+- Post idea/theme
+- Content type (image/video/carousel)
+- Caption hook
+- Best posting time
+
+Format as a structured list."""
+    
+    chat = LlmChat(
+        api_key=os.environ['EMERGENT_LLM_KEY'],
+        session_id=str(uuid.uuid4()),
+        system_message=f"You are a social media strategist creating content calendars. {brand_context}"
+    ).with_model("openai", "gpt-5.2")
+    
+    calendar = await chat.send_message(UserMessage(text=prompt))
+    
+    return {"calendar": calendar, "days": request.days}
 
 app.include_router(api_router)
 
