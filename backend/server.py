@@ -105,6 +105,19 @@ class BatchGenerateRequest(BaseModel):
     count: int
     content_type: str
 
+class MetaAdsConnectRequest(BaseModel):
+    access_token: str
+    instagram_account_id: Optional[str] = None
+    facebook_page_id: Optional[str] = None
+
+class AdCampaignRequest(BaseModel):
+    brand_id: str
+    campaign_goal: str
+    target_audience: str
+    daily_budget: float
+    promotion_type: str
+    location: str
+
 @api_router.post("/auth/signup", response_model=AuthResponse)
 async def signup(request: SignupRequest):
     existing_user = await db.users.find_one({"email": request.email})
@@ -354,100 +367,100 @@ async def get_project_contents(project_id: str, current_user: dict = Depends(get
 async def get_templates():
     templates = [
         {
-            "id": "restaurant-promo",
-            "name": "Restaurant Promotion",
-            "description": "Promote your daily specials and menu items",
-            "type": "image",
-            "category": "restaurant",
-            "prompt": "Create an engaging social media post promoting our daily special: [dish name]. Highlight fresh ingredients and limited availability. Tone: appetizing and urgent."
-        },
-        {
-            "id": "cafe-reel",
-            "name": "Cafe Reel",
-            "description": "Showcase your coffee and ambiance",
-            "type": "video",
-            "category": "cafe",
-            "prompt": "Generate a cozy cafe video concept showcasing our coffee-making process. Include shots of latte art, warm ambiance, and happy customers. Tone: warm and inviting."
-        },
-        {
-            "id": "product-launch",
-            "name": "Product Launch",
-            "description": "Announce your new product with style",
-            "type": "image",
-            "category": "product",
-            "prompt": "Announce our new product launch: [product name]. Emphasize innovation, benefits, and exclusive early access. Tone: exciting and professional."
-        },
-        {
-            "id": "service-ad",
-            "name": "Service Ad",
-            "description": "Promote your services effectively",
-            "type": "video",
-            "category": "service",
-            "prompt": "Promote our service: [service name]. Focus on solving customer pain points, showcasing results, and including a clear call-to-action. Tone: helpful and trustworthy."
-        },
-        {
-            "id": "limited-promo",
-            "name": "Limited-Time Promotion",
-            "description": "Create urgency with time-sensitive offers",
+            "id": "daily-special",
+            "name": "Daily Caf\u00e9 Special",
+            "description": "Promote today's featured drink or dessert",
             "type": "image",
             "category": "promotion",
-            "prompt": "Create a limited-time promotion post. Emphasize scarcity, deadline, and exclusive benefits. Include clear CTA and sense of urgency."
+            "prompt": "Create an Instagram post promoting our daily special: [drink/dessert name]. Highlight ingredients, flavor profile, and limited availability. Tone: appetizing and urgent. Include caf\u00e9-specific hashtags like #CoffeeLovers #CafeLife #DailySpecial"
         },
         {
-            "id": "educational",
-            "name": "Educational Content",
-            "description": "Share valuable knowledge with your audience",
-            "type": "caption",
-            "category": "education",
-            "prompt": "Create educational content about [topic]. Break down complex information into digestible tips. Add value and position brand as expert."
+            "id": "new-drink-launch",
+            "name": "New Drink Launch",
+            "description": "Announce a new signature drink",
+            "type": "image",
+            "category": "launch",
+            "prompt": "Announce our new signature drink: [drink name]. Emphasize unique flavors, ingredients, and the experience. Create excitement with exclusive first-taste offer. Include hashtags: #NewDrink #CafeMenu #SpecialtyCoffee"
         },
         {
-            "id": "behind-scenes",
-            "name": "Behind-the-Scenes",
-            "description": "Show the human side of your brand",
+            "id": "latte-art-reel",
+            "name": "Latte Art Showcase",
+            "description": "Feature beautiful latte art in a reel",
             "type": "video",
-            "category": "storytelling",
-            "prompt": "Create behind-the-scenes content showing our team, process, or daily operations. Build authentic connection with audience."
+            "category": "reel",
+            "prompt": "Create a TikTok/Instagram reel concept showcasing our barista creating beautiful latte art. Include: close-up of pour, reveal of design, cozy caf\u00e9 ambiance. Tone: aesthetic and satisfying. Hashtags: #LatteArt #BaristaLife #CoffeeArt"
         },
         {
-            "id": "testimonial",
-            "name": "Customer Testimonial",
-            "description": "Showcase customer success stories",
+            "id": "cozy-atmosphere",
+            "name": "Cozy Caf\u00e9 Vibes",
+            "description": "Highlight your caf\u00e9's ambiance",
+            "type": "video",
+            "category": "atmosphere",
+            "prompt": "Create content showing the cozy atmosphere of our caf\u00e9. Include: warm lighting, comfortable seating, people enjoying coffee, background music vibe. Tone: inviting and relaxing. Hashtags: #CafeVibes #CozyPlace #CoffeTime"
+        },
+        {
+            "id": "dessert-spotlight",
+            "name": "Dessert Spotlight",
+            "description": "Feature your signature desserts",
+            "type": "image",
+            "category": "menu",
+            "prompt": "Spotlight our signature dessert: [dessert name]. Show close-up shot, describe taste and texture, pair with coffee recommendation. Tone: indulgent and tempting. Hashtags: #CafeDessert #Pastries #SweetTooth"
+        },
+        {
+            "id": "weekend-promo",
+            "name": "Weekend Caf\u00e9 Promotion",
+            "description": "Drive weekend traffic",
+            "type": "image",
+            "category": "promotion",
+            "prompt": "Create a weekend promotion post for [offer]. Build excitement for weekend visits, emphasize relaxation and treat-yourself vibe. Include clear CTA. Hashtags: #WeekendVibes #CafeCulture #WeekendTreats"
+        },
+        {
+            "id": "barista-moments",
+            "name": "Barista Behind the Scenes",
+            "description": "Show your barista team at work",
+            "type": "video",
+            "category": "story",
+            "prompt": "Create behind-the-scenes content featuring our baristas. Show: coffee preparation, passion for craft, team personality. Build authentic connection. Hashtags: #BaristaLife #CoffeePassion #MeetTheTeam"
+        },
+        {
+            "id": "customer-experience",
+            "name": "Guest Experience Story",
+            "description": "Feature happy customers and testimonials",
             "type": "image",
             "category": "social-proof",
-            "prompt": "Create a customer testimonial post featuring real feedback. Highlight transformation, results, and emotional impact."
+            "prompt": "Share customer experience featuring real feedback about our caf\u00e9. Highlight: favorite drinks, ambiance appreciation, memorable moments. Tone: authentic and heartwarming. Hashtags: #HappyGuests #CafeCommunity #CustomerLove"
         },
         {
-            "id": "seasonal",
-            "name": "Seasonal Promotion",
-            "description": "Leverage seasonal trends and holidays",
+            "id": "seasonal-drink",
+            "name": "Seasonal Caf\u00e9 Special",
+            "description": "Promote seasonal drink offerings",
             "type": "image",
             "category": "seasonal",
-            "prompt": "Create seasonal content for [holiday/season]. Connect product/service to seasonal themes and emotions."
+            "prompt": "Create seasonal content for [season/holiday] special drink. Connect flavors to seasonal themes and emotions. Limited-time emphasis. Hashtags: #SeasonalSpecial #LimitedTime #CafeSeason"
         },
         {
-            "id": "announcement",
-            "name": "Brand Announcement",
-            "description": "Share important brand news",
-            "type": "caption",
-            "category": "news",
-            "prompt": "Make an official brand announcement about [news]. Build excitement, explain benefits, and include next steps."
-        },
-        {
-            "id": "event-promo",
-            "name": "Event Promotion",
-            "description": "Drive attendance to your events",
+            "id": "morning-ritual",
+            "name": "Morning Coffee Ritual",
+            "description": "Capture the perfect morning moment",
             "type": "image",
-            "category": "event",
-            "prompt": "Promote upcoming event: [event name]. Include date, location, what to expect, and registration link. Create FOMO."
+            "category": "lifestyle",
+            "prompt": "Create content celebrating the morning coffee ritual. Show: fresh brew, sunrise vibes, starting the day right. Inspire your audience. Hashtags: #MorningCoffee #CoffeeRitual #MorningVibes"
         },
         {
-            "id": "engagement",
-            "name": "Engagement Post",
-            "description": "Boost interaction with your audience",
-            "type": "caption",
-            "category": "engagement",
-            "prompt": "Create an engaging post that asks questions, runs polls, or encourages comments. Make it fun and interactive."
+            "id": "study-spot",
+            "name": "Perfect Study Spot",
+            "description": "Attract students and remote workers",
+            "type": "image",
+            "category": "audience",
+            "prompt": "Position caf\u00e9 as the perfect study/work spot. Highlight: WiFi, comfortable seating, quiet corners, productivity fuel. Target students and remote workers. Hashtags: #StudySpot #CafeWork #RemoteWork"
+        },
+        {
+            "id": "date-night",
+            "name": "Caf\u00e9 Date Night",
+            "description": "Promote evening coffee dates",
+            "type": "image",
+            "category": "audience",
+            "prompt": "Create romantic caf\u00e9 date content. Highlight: cozy seating for two, dessert pairings, intimate atmosphere, evening specials. Target couples. Hashtags: #CafeDate #CoffeDate #CozyNight"
         }
     ]
     return templates
@@ -861,6 +874,231 @@ Format as a numbered list with clear separation."""
     await db.generated_contents.insert_one(content_doc)
     
     return {"batch_content": batch_content, "count": request.count, "content_id": content_id}
+
+@api_router.post("/demo/setup")
+async def setup_demo_data(current_user: dict = Depends(get_current_user)):
+    """Create demo café data for demonstrations"""
+    try:
+        # Create demo café brand
+        brand_id = str(uuid.uuid4())
+        demo_brand = {
+            "id": brand_id,
+            "user_id": current_user["user_id"],
+            "name": "Urban Brew Café",
+            "tone": "warm and inviting",
+            "industry": "café",
+            "specialties": "Artisan Coffee, Fresh Pastries, Cozy Atmosphere",
+            "website_url": "https://urbanbrewcafe.example.com",
+            "brand_analysis": {
+                "Brand Tone": "Warm, welcoming, community-focused",
+                "Value Proposition": "Premium artisan coffee experience with cozy atmosphere",
+                "Target Audience": "Remote workers, students, coffee enthusiasts, couples",
+                "Signature Drinks": ["Vanilla Latte", "Caramel Cold Brew", "Matcha Latte"],
+                "Dessert Highlights": ["Chocolate Croissant", "Blueberry Muffin", "Carrot Cake"],
+                "Ambiance Style": "Modern rustic with warm lighting",
+                "Location Context": "Urban neighborhood café with outdoor seating"
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Check if demo brand already exists
+        existing = await db.brands.find_one({"user_id": current_user["user_id"], "name": "Urban Brew Café"})
+        if not existing:
+            await db.brands.insert_one(demo_brand)
+        else:
+            brand_id = existing["id"]
+        
+        # Create demo project
+        project_id = str(uuid.uuid4())
+        demo_project = {
+            "id": project_id,
+            "brand_id": brand_id,
+            "name": "Fall Season Campaign",
+            "type": "image",
+            "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        existing_project = await db.projects.find_one({"brand_id": brand_id, "name": "Fall Season Campaign"})
+        if not existing_project:
+            await db.projects.insert_one(demo_project)
+        
+        # Create demo ideas
+        demo_ideas = [
+            {
+                "id": str(uuid.uuid4()),
+                "brand_id": brand_id,
+                "idea_type": "social_post",
+                "idea_text": "Showcase our new Pumpkin Spice Latte with a cozy fall aesthetic. Feature warm lighting, autumn leaves, and a close-up of the latte art.",
+                "status": "saved",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "brand_id": brand_id,
+                "idea_type": "ad_hook",
+                "idea_text": "Hook: 'Your morning coffee, but make it an experience.' Show the journey from bean to cup with our artisan process.",
+                "status": "saved",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        
+        for idea in demo_ideas:
+            existing_idea = await db.ideas.find_one({"brand_id": brand_id, "idea_text": idea["idea_text"]})
+            if not existing_idea:
+                await db.ideas.insert_one(idea)
+        
+        return {
+            "success": True,
+            "message": "Demo café data created",
+            "brand_id": brand_id,
+            "brand_name": "Urban Brew Café"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create demo data: {str(e)}")
+
+@api_router.post("/meta-ads/connect")
+async def connect_meta_ads(request: MetaAdsConnectRequest, current_user: dict = Depends(get_current_user)):
+    """Store Meta Ads connection details"""
+    connection_id = str(uuid.uuid4())
+    connection_doc = {
+        "id": connection_id,
+        "user_id": current_user["user_id"],
+        "access_token": request.access_token,
+        "instagram_account_id": request.instagram_account_id,
+        "facebook_page_id": request.facebook_page_id,
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "status": "active"
+    }
+    
+    # Check if connection exists
+    existing = await db.meta_ads_connections.find_one({"user_id": current_user["user_id"]})
+    if existing:
+        await db.meta_ads_connections.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$set": connection_doc}
+        )
+    else:
+        await db.meta_ads_connections.insert_one(connection_doc)
+    
+    return {"success": True, "message": "Meta Ads account connected", "connection_id": connection_id}
+
+@api_router.get("/meta-ads/status")
+async def get_meta_ads_status(current_user: dict = Depends(get_current_user)):
+    """Check Meta Ads connection status"""
+    connection = await db.meta_ads_connections.find_one({"user_id": current_user["user_id"]}, {"_id": 0, "access_token": 0})
+    
+    if connection:
+        return {"connected": True, "connection": connection}
+    return {"connected": False}
+
+@api_router.post("/ads/campaign/strategy")
+async def create_ad_strategy(request: AdCampaignRequest, current_user: dict = Depends(get_current_user)):
+    """AI Performance Marketer - Generate ad campaign strategy"""
+    brand = await db.brands.find_one({"id": request.brand_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    
+    brand_context = f"""Café Brand: {brand.get('name')}
+Tone: {brand.get('tone')}
+Specialties: {brand.get('specialties', 'Coffee and pastries')}"""
+    
+    strategy_prompt = f"""{brand_context}
+
+Campaign Goal: {request.campaign_goal}
+Target Audience: {request.target_audience}
+Daily Budget: ${request.daily_budget}
+Promotion Type: {request.promotion_type}
+Location: {request.location}
+
+As a top Meta Ads performance marketer, create a complete ad campaign strategy including:
+
+1. **Campaign Structure**
+   - Campaign name
+   - Ad set configuration
+   - Budget allocation
+
+2. **Creative Recommendations**
+   - Ad headline (5 variations)
+   - Primary text/caption
+   - Call-to-action
+   - Visual concept
+
+3. **Targeting Strategy**
+   - Detailed demographics
+   - Interests to target
+   - Behavior targeting
+   - Lookalike audience recommendations
+
+4. **Optimization Tips**
+   - Testing recommendations
+   - Success metrics to track
+   - When to scale
+
+Format clearly with sections."""
+    
+    chat = LlmChat(
+        api_key=os.environ['EMERGENT_LLM_KEY'],
+        session_id=str(uuid.uuid4()),
+        system_message="You are an expert Meta Ads performance marketer with 10+ years experience. You create high-converting ad campaigns."
+    ).with_model("openai", "gpt-5.2")
+    
+    strategy = await chat.send_message(UserMessage(text=strategy_prompt))
+    
+    # Store campaign strategy
+    campaign_id = str(uuid.uuid4())
+    campaign_doc = {
+        "id": campaign_id,
+        "brand_id": request.brand_id,
+        "user_id": current_user["user_id"],
+        "campaign_goal": request.campaign_goal,
+        "target_audience": request.target_audience,
+        "daily_budget": request.daily_budget,
+        "promotion_type": request.promotion_type,
+        "location": request.location,
+        "strategy": strategy,
+        "status": "draft",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.ad_campaigns.insert_one(campaign_doc)
+    
+    return {"campaign_id": campaign_id, "strategy": strategy}
+
+@api_router.get("/ads/campaigns")
+async def get_ad_campaigns(current_user: dict = Depends(get_current_user)):
+    """Get all ad campaigns for user"""
+    campaigns = await db.ad_campaigns.find(
+        {"user_id": current_user["user_id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return campaigns
+
+@api_router.post("/ads/campaign/{campaign_id}/launch")
+async def launch_ad_campaign(campaign_id: str, current_user: dict = Depends(get_current_user)):
+    """Launch ad campaign (simulated - would integrate with Meta Ads API in production)"""
+    campaign = await db.ad_campaigns.find_one({"id": campaign_id, "user_id": current_user["user_id"]})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Update campaign status
+    await db.ad_campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": {
+            "status": "active",
+            "launched_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "success": True,
+        "message": "Campaign launched successfully",
+        "campaign_id": campaign_id,
+        "status": "active"
+    }
 
 app.include_router(api_router)
 

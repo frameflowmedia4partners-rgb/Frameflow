@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut } from "lucide-react";
+import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut, TrendingUp } from "lucide-react";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
@@ -18,11 +18,12 @@ export default function Layout({ children }) {
     { path: "/ideas", icon: Sparkles, label: "Idea Engine", testid: "nav-ideas" },
     { path: "/projects", icon: FolderKanban, label: "Projects", testid: "nav-projects" },
     { path: "/create", icon: Sparkles, label: "Create Content", testid: "nav-create" },
+    { path: "/marketing", icon: TrendingUp, label: "Marketing", testid: "nav-marketing" },
     { path: "/media", icon: Image, label: "Media Library", testid: "nav-media-lib" },
     { path: "/templates", icon: LayoutIcon, label: "Templates", testid: "nav-templates" },
     { path: "/calendar", icon: History, label: "Calendar", testid: "nav-calendar" },
     { path: "/history", icon: History, label: "History", testid: "nav-history" },
-    { path: "/brand", icon: Settings, label: "Brand Settings", testid: "nav-brand-settings" }
+    { path: "/brand", icon: Settings, label: "Caf\u00e9 Settings", testid: "nav-brand-settings" }
   ];
 
   if (!token) {

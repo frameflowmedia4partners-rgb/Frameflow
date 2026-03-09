@@ -5,25 +5,31 @@ import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bot, Check } from "lucide-react";
+import { Bot, Check, Coffee } from "lucide-react";
 import { toast } from "sonner";
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
-  const [brandName, setBrandName] = useState("");
-  const [tone, setTone] = useState("");
-  const [industry, setIndustry] = useState("");
+  const [cafeName, setCafeName] = useState("");
+  const [tone, setTone] = useState("warm and inviting");
+  const [industry] = useState("café");
+  const [specialties, setSpecialties] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const token = localStorage.getItem("token");
 
-  const handleCreateBrand = async () => {
+  const handleCreateCafe = async () => {
     setLoading(true);
     try {
       await axios.post(
         `${API}/brands`,
-        { name: brandName, tone, industry },
+        { 
+          name: cafeName, 
+          tone, 
+          industry,
+          specialties: specialties || "Coffee, Pastries, Ambiance"
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
@@ -33,18 +39,18 @@ export default function OnboardingPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      toast.success("Brand profile created!");
-      navigate("/dashboard");
+      toast.success("Café profile created!");
+      navigate("/dashboard", { replace: true });
     } catch (error) {
-      toast.error("Failed to create brand");
+      toast.error("Failed to create café profile");
     } finally {
       setLoading(false);
     }
   };
 
   const steps = [
-    { num: 1, title: "Create Brand Profile" },
-    { num: 2, title: "Upload Media" },
+    { num: 1, title: "Create Café Profile" },
+    { num: 2, title: "Café Style" },
     { num: 3, title: "Ready to Create" }
   ];
 
@@ -55,12 +61,12 @@ export default function OnboardingPage() {
       <div className="relative z-10 w-full max-w-2xl">
         <div className="text-center mb-8">
           <div className="inline-block w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center mb-4 shadow-xl shadow-indigo-500/20 animate-bounce-slow">
-            <Bot className="w-8 h-8 text-white" />
+            <Coffee className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold font-outfit text-slate-900 mb-2">
-            Let's Get You Started
+            Let's Set Up Your Café
           </h1>
-          <p className="text-slate-600">Set up your brand in just a few steps</p>
+          <p className="text-slate-600">Set up your café profile in just a few steps</p>
         </div>
 
         <div className="flex justify-center mb-8 gap-4">
@@ -86,52 +92,38 @@ export default function OnboardingPage() {
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <Label htmlFor="brandName" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Brand Name
+                <Label htmlFor="cafeName" className="text-sm font-semibold text-slate-700 mb-2 block">
+                  Café Name
                 </Label>
                 <Input
-                  data-testid="onboarding-brand-name-input"
-                  id="brandName"
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="My Awesome Brand"
+                  data-testid="onboarding-cafe-name-input"
+                  id="cafeName"
+                  value={cafeName}
+                  onChange={(e) => setCafeName(e.target.value)}
+                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                  placeholder="Urban Brew Café"
                 />
               </div>
 
               <div>
-                <Label htmlFor="tone" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Brand Tone
+                <Label htmlFor="specialties" className="text-sm font-semibold text-slate-700 mb-2 block">
+                  Café Specialties
                 </Label>
                 <Input
-                  data-testid="onboarding-tone-input"
-                  id="tone"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="Professional, Friendly, Playful..."
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="industry" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Industry
-                </Label>
-                <Input
-                  data-testid="onboarding-industry-input"
-                  id="industry"
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="Restaurant, Tech, Fashion..."
+                  data-testid="onboarding-specialties-input"
+                  id="specialties"
+                  value={specialties}
+                  onChange={(e) => setSpecialties(e.target.value)}
+                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                  placeholder="Artisan Coffee, Pastries, Cozy Atmosphere"
                 />
               </div>
 
               <Button
                 data-testid="onboarding-next-btn"
                 onClick={() => setStep(2)}
-                disabled={!brandName}
-                className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200 hover:shadow-indigo-500/40"
+                disabled={!cafeName}
+                className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
               >
                 Continue
               </Button>
@@ -140,26 +132,38 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <div className="space-y-5">
-              <div className="text-center py-8">
-                <p className="text-slate-600 mb-6">
-                  You can upload brand media (logos, images) later from the Media Library
-                </p>
+              <div>
+                <Label htmlFor="tone" className="text-sm font-semibold text-slate-700 mb-2 block">
+                  Café Vibe & Tone
+                </Label>
+                <select
+                  id="tone"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  className="w-full rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                >
+                  <option value="warm and inviting">Warm & Inviting</option>
+                  <option value="modern and minimalist">Modern & Minimalist</option>
+                  <option value="cozy and rustic">Cozy & Rustic</option>
+                  <option value="trendy and vibrant">Trendy & Vibrant</option>
+                  <option value="elegant and sophisticated">Elegant & Sophisticated</option>
+                </select>
               </div>
 
               <div className="flex gap-3">
                 <Button
                   onClick={() => setStep(1)}
                   variant="outline"
-                  className="flex-1 rounded-full px-8 py-6 bg-white text-slate-900 border border-slate-200 font-medium hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
+                  className="flex-1 rounded-full px-8 py-6 bg-white text-slate-900 border border-slate-200 font-medium"
                 >
                   Back
                 </Button>
                 <Button
-                  data-testid="onboarding-skip-media-btn"
+                  data-testid="onboarding-continue-btn"
                   onClick={() => setStep(3)}
-                  className="flex-1 rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200 hover:shadow-indigo-500/40"
+                  className="flex-1 rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
                 >
-                  Skip for Now
+                  Continue
                 </Button>
               </div>
             </div>
@@ -175,15 +179,15 @@ export default function OnboardingPage() {
                   You're All Set!
                 </h2>
                 <p className="text-slate-600">
-                  Ready to start creating amazing content with Framey
+                  Ready to start creating amazing café content with Framey
                 </p>
               </div>
 
               <Button
                 data-testid="onboarding-finish-btn"
-                onClick={handleCreateBrand}
+                onClick={handleCreateCafe}
                 disabled={loading}
-                className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200 hover:shadow-indigo-500/40"
+                className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
               >
                 {loading ? "Creating..." : "Go to Dashboard"}
               </Button>

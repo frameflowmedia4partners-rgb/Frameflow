@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API } from "@/App";
@@ -16,6 +16,14 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    // Check if already logged in
+    const token = localStorage.getItem("token");
+    if (token) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -27,11 +35,28 @@ export default function AuthPage() {
         : { email, password, full_name: fullName };
 
       const response = await axios.post(`${API}${endpoint}`, payload);
+      
+      // Store authentication data
       localStorage.setItem("token", response.data.token);
       localStorage.setItem("user", JSON.stringify(response.data.user));
 
       toast.success(isLogin ? "Welcome back!" : "Account created!");
-      navigate(isLogin ? "/dashboard" : "/onboarding");
+      
+      // Navigate based on onboarding status
+      if (isLogin) {
+        // Check if user has completed onboarding
+        const userRes = await axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${response.data.token}` }
+        });
+        
+        if (userRes.data.onboarding_completed) {
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate("/onboarding", { replace: true });
+        }
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || "Authentication failed");
     } finally {
@@ -52,7 +77,7 @@ export default function AuthPage() {
             {isLogin ? "Welcome Back" : "Get Started"}
           </h1>
           <p className="text-slate-600">
-            {isLogin ? "Sign in to continue creating" : "Create your account"}
+            {isLogin ? "Sign in to your café marketing studio" : "Create your café account"}
           </p>
         </div>
 
@@ -61,7 +86,7 @@ export default function AuthPage() {
             {!isLogin && (
               <div>
                 <Label htmlFor="fullName" className="text-sm font-semibold text-slate-700 mb-2 block">
-                  Full Name
+                  Café Name / Your Name
                 </Label>
                 <Input
                   data-testid="auth-fullname-input"
@@ -70,8 +95,8 @@ export default function AuthPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="John Doe"
+                  className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
+                  placeholder="Urban Brew Café"
                 />
               </div>
             )}
@@ -87,7 +112,7 @@ export default function AuthPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
                 placeholder="you@example.com"
               />
             </div>
@@ -103,7 +128,7 @@ export default function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
                 placeholder="••••••••"
               />
             </div>
@@ -112,9 +137,9 @@ export default function AuthPage() {
               data-testid="auth-submit-btn"
               type="submit"
               disabled={loading}
-              className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200 hover:shadow-indigo-500/40"
+              className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
             >
-              {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
+              {loading ? "Loading..." : isLogin ? "Sign In" : "Create Café Account"}
             </Button>
           </form>
 

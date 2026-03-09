@@ -15,6 +15,8 @@ import CalendarPage from "@/pages/CalendarPage";
 import HistoryPage from "@/pages/HistoryPage";
 import BrandProfilePage from "@/pages/BrandProfilePage";
 import ProjectPage from "@/pages/ProjectPage";
+import MarketingDashboard from "@/pages/MarketingDashboard";
+import CreateAdCampaign from "@/pages/CreateAdCampaign";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -121,6 +123,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProjectPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/marketing"
+            element={
+              <ProtectedRoute>
+                <MarketingDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ads/create"
+            element={
+              <ProtectedRoute>
+                <CreateAdCampaign />
               </ProtectedRoute>
             }
           />
