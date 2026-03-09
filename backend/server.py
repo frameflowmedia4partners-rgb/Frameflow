@@ -875,85 +875,222 @@ Format as a numbered list with clear separation."""
     
     return {"batch_content": batch_content, "count": request.count, "content_id": content_id}
 
-@api_router.post("/demo/setup")
-async def setup_demo_data(current_user: dict = Depends(get_current_user)):
-    """Create demo café data for demonstrations"""
-    try:
-        # Create demo café brand
-        brand_id = str(uuid.uuid4())
-        demo_brand = {
-            "id": brand_id,
-            "user_id": current_user["user_id"],
-            "name": "Urban Brew Café",
-            "tone": "warm and inviting",
-            "industry": "café",
-            "specialties": "Artisan Coffee, Fresh Pastries, Cozy Atmosphere",
-            "website_url": "https://urbanbrewcafe.example.com",
-            "brand_analysis": {
-                "Brand Tone": "Warm, welcoming, community-focused",
-                "Value Proposition": "Premium artisan coffee experience with cozy atmosphere",
-                "Target Audience": "Remote workers, students, coffee enthusiasts, couples",
-                "Signature Drinks": ["Vanilla Latte", "Caramel Cold Brew", "Matcha Latte"],
-                "Dessert Highlights": ["Chocolate Croissant", "Blueberry Muffin", "Carrot Cake"],
-                "Ambiance Style": "Modern rustic with warm lighting",
-                "Location Context": "Urban neighborhood café with outdoor seating"
-            },
+@api_router.post("/demo/login")
+async def demo_login():
+    """Public demo login - creates or logs in demo user with full sample data"""
+    demo_email = "demo@frameflow.cafe"
+    demo_password = "FrameflowDemo2026"
+    
+    # Check if demo user exists
+    demo_user = await db.users.find_one({"email": demo_email})
+    
+    if not demo_user:
+        # Create demo user
+        user_id = str(uuid.uuid4())
+        demo_user = {
+            "id": user_id,
+            "email": demo_email,
+            "password_hash": hash_password(demo_password),
+            "full_name": "Demo Café Owner",
+            "onboarding_completed": True,
+            "is_demo_account": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
-        
-        # Check if demo brand already exists
-        existing = await db.brands.find_one({"user_id": current_user["user_id"], "name": "Urban Brew Café"})
+        await db.users.insert_one(demo_user)
+    else:
+        user_id = demo_user["id"]
+    
+    # Create comprehensive demo data
+    await _create_full_demo_data(user_id)
+    
+    # Generate token
+    token = create_access_token({"sub": user_id, "email": demo_email})
+    
+    return AuthResponse(
+        token=token,
+        user={"id": user_id, "email": demo_email, "full_name": "Demo Café Owner", "is_demo": True}
+    )
+
+async def _create_full_demo_data(user_id: str):
+    """Create comprehensive demo data for showcasing the platform"""
+    
+    # 1. Create Demo Café Brand
+    brand_id = "demo-urban-brew-cafe"
+    demo_brand = {
+        "id": brand_id,
+        "user_id": user_id,
+        "name": "Urban Brew Café",
+        "tone": "warm and inviting",
+        "industry": "café",
+        "specialties": "Artisan Coffee, Fresh Pastries, Cozy Atmosphere",
+        "website_url": "https://urbanbrewcafe.example.com",
+        "brand_analysis": {
+            "Brand Tone": "Warm, welcoming, community-focused",
+            "Value Proposition": "Premium artisan coffee experience with cozy atmosphere",
+            "Target Audience": "Remote workers, students, coffee enthusiasts, couples",
+            "Signature Drinks": ["Vanilla Latte", "Caramel Cold Brew", "Matcha Latte", "Pumpkin Spice Latte"],
+            "Dessert Highlights": ["Chocolate Croissant", "Blueberry Muffin", "Carrot Cake", "Tiramisu"],
+            "Ambiance Style": "Modern rustic with warm lighting and exposed brick",
+            "Location Context": "Urban neighborhood café with outdoor patio seating"
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    existing_brand = await db.brands.find_one({"id": brand_id})
+    if not existing_brand:
+        await db.brands.insert_one(demo_brand)
+    
+    # 2. Create Demo Projects/Campaigns
+    demo_projects = [
+        {"id": "demo-fall-campaign", "name": "Fall Season Campaign", "type": "image", "status": "active"},
+        {"id": "demo-new-drink-launch", "name": "Pumpkin Spice Launch", "type": "video", "status": "active"},
+        {"id": "demo-weekly-specials", "name": "Weekly Specials Series", "type": "caption", "status": "active"},
+        {"id": "demo-holiday-promo", "name": "Holiday Promotion", "type": "image", "status": "draft"},
+    ]
+    
+    for project in demo_projects:
+        existing = await db.projects.find_one({"id": project["id"]})
         if not existing:
-            await db.brands.insert_one(demo_brand)
-        else:
-            brand_id = existing["id"]
-        
-        # Create demo project
-        project_id = str(uuid.uuid4())
-        demo_project = {
-            "id": project_id,
+            await db.projects.insert_one({
+                **project,
+                "brand_id": brand_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+    
+    # 3. Create Demo Generated Content
+    demo_contents = [
+        {
+            "id": "demo-content-1",
+            "project_id": "demo-fall-campaign",
             "brand_id": brand_id,
-            "name": "Fall Season Campaign",
-            "type": "image",
+            "type": "caption",
+            "content_text": "☕ Fall is here, and so is our famous Pumpkin Spice Latte! 🎃\n\nCrafted with real pumpkin, warm spices, and topped with silky steamed milk. Every sip feels like a cozy autumn hug.\n\n📍 Available now at Urban Brew Café\n\n#PumpkinSpice #FallVibes #CoffeeLovers #UrbanBrew #CafeLife #SeasonalSpecial",
+            "prompt": "Create a fall-themed Instagram caption for our new Pumpkin Spice Latte"
+        },
+        {
+            "id": "demo-content-2",
+            "project_id": "demo-fall-campaign",
+            "type": "caption",
+            "brand_id": brand_id,
+            "content_text": "The leaves are falling, but our standards aren't. 🍂\n\nOur baristas are serving up perfection one cup at a time. Come taste the difference that passion makes.\n\n✨ Fresh beans, roasted weekly\n✨ Locally sourced pastries\n✨ Free WiFi for remote workers\n\nTag someone who needs their daily brew! ☕\n\n#CafeVibes #CoffeeTime #LocalCafe #UrbanBrewCafe",
+            "prompt": "Write an engaging caption highlighting our café quality"
+        },
+        {
+            "id": "demo-content-3",
+            "project_id": "demo-weekly-specials",
+            "type": "caption",
+            "brand_id": brand_id,
+            "content_text": "🌟 WEEKLY SPECIAL ALERT 🌟\n\nThis week only: Caramel Apple Cold Brew!\n\nImagine crisp apple notes dancing with buttery caramel, all swirling in our smooth cold brew. It's fall in a cup. 🍎\n\n💰 Just $4.50 (reg. $6)\n📅 Available Mon-Sun this week only\n\nDon't miss out - once it's gone, it's gone!\n\n#WeeklySpecial #ColdBrew #FallDrinks #LimitedTime #UrbanBrew",
+            "prompt": "Create a promotional caption for our weekly special drink"
+        },
+    ]
+    
+    for content in demo_contents:
+        existing = await db.contents.find_one({"id": content["id"]})
+        if not existing:
+            await db.contents.insert_one({
+                **content,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+    
+    # 4. Create Demo Ideas
+    demo_ideas = [
+        {
+            "id": "demo-idea-1",
+            "brand_id": brand_id,
+            "idea_type": "social_post",
+            "idea_text": "📸 Behind-the-scenes reel: Follow a coffee bean's journey from our roaster partner to your cup. Show the roasting process, the careful grinding, and the perfect pour. End with a satisfied customer's first sip.",
+            "status": "saved"
+        },
+        {
+            "id": "demo-idea-2",
+            "brand_id": brand_id,
+            "idea_type": "ad_hook",
+            "idea_text": "🎯 Ad Hook: 'Your office called. It wants you to work from somewhere better.' Target remote workers with images of cozy laptop setups, great WiFi speeds, and unlimited coffee refills.",
+            "status": "saved"
+        },
+        {
+            "id": "demo-idea-3",
+            "brand_id": brand_id,
+            "idea_type": "campaign",
+            "idea_text": "🎄 Holiday Campaign: '12 Days of Coffee Christmas' - Feature a different specialty drink each day leading up to Christmas. Create FOMO with limited quantities and countdown posts.",
+            "status": "saved"
+        },
+        {
+            "id": "demo-idea-4",
+            "brand_id": brand_id,
+            "idea_type": "promotion",
+            "idea_text": "☕ Loyalty Program Launch: 'Brew Crew' membership - Buy 9 drinks, get the 10th free. Create shareable digital punch cards and encourage customers to post their progress.",
+            "status": "saved"
+        },
+        {
+            "id": "demo-idea-5",
+            "brand_id": brand_id,
+            "idea_type": "storytelling",
+            "idea_text": "📖 Customer Spotlight Series: Interview regular customers about their favorite drink and what Urban Brew means to them. Create short video testimonials for social proof.",
+            "status": "saved"
+        },
+    ]
+    
+    for idea in demo_ideas:
+        existing = await db.ideas.find_one({"id": idea["id"]})
+        if not existing:
+            await db.ideas.insert_one({
+                **idea,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+    
+    # 5. Create Demo Ad Campaigns
+    demo_campaigns = [
+        {
+            "id": "demo-campaign-1",
+            "brand_id": brand_id,
+            "user_id": user_id,
+            "campaign_goal": "engagement",
+            "target_audience": "Coffee lovers aged 25-45 within 10 miles",
+            "daily_budget": 15.0,
+            "promotion_type": "Fall Season Launch",
+            "location": "Downtown Seattle, 10-mile radius",
             "status": "active",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        existing_project = await db.projects.find_one({"brand_id": brand_id, "name": "Fall Season Campaign"})
-        if not existing_project:
-            await db.projects.insert_one(demo_project)
-        
-        # Create demo ideas
-        demo_ideas = [
-            {
-                "id": str(uuid.uuid4()),
-                "brand_id": brand_id,
-                "idea_type": "social_post",
-                "idea_text": "Showcase our new Pumpkin Spice Latte with a cozy fall aesthetic. Feature warm lighting, autumn leaves, and a close-up of the latte art.",
-                "status": "saved",
+            "strategy": "Focus on warm, inviting imagery showcasing fall drinks. Target morning commuters and remote workers. Use carousel ads with multiple drink options. Peak posting times: 7-9 AM and 2-4 PM."
+        },
+        {
+            "id": "demo-campaign-2",
+            "brand_id": brand_id,
+            "user_id": user_id,
+            "campaign_goal": "traffic",
+            "target_audience": "Remote workers and students",
+            "daily_budget": 20.0,
+            "promotion_type": "Work From Café Wednesdays",
+            "location": "University District, 5-mile radius",
+            "status": "paused",
+            "strategy": "Highlight WiFi, comfortable seating, and productivity-friendly atmosphere. Offer Wednesday specials for laptop workers. Partner with local coworking spaces for cross-promotion."
+        },
+    ]
+    
+    for campaign in demo_campaigns:
+        existing = await db.ad_campaigns.find_one({"id": campaign["id"]})
+        if not existing:
+            await db.ad_campaigns.insert_one({
+                **campaign,
                 "created_at": datetime.now(timezone.utc).isoformat()
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "brand_id": brand_id,
-                "idea_type": "ad_hook",
-                "idea_text": "Hook: 'Your morning coffee, but make it an experience.' Show the journey from bean to cup with our artisan process.",
-                "status": "saved",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-        ]
-        
-        for idea in demo_ideas:
-            existing_idea = await db.ideas.find_one({"brand_id": brand_id, "idea_text": idea["idea_text"]})
-            if not existing_idea:
-                await db.ideas.insert_one(idea)
+            })
+
+@api_router.post("/demo/setup")
+async def setup_demo_data(current_user: dict = Depends(get_current_user)):
+    """Create demo café data for existing logged-in user"""
+    try:
+        await _create_full_demo_data(current_user["user_id"])
         
         return {
             "success": True,
-            "message": "Demo café data created",
-            "brand_id": brand_id,
-            "brand_name": "Urban Brew Café"
+            "message": "Demo café data created successfully!",
+            "brand_name": "Urban Brew Café",
+            "projects_created": 4,
+            "ideas_created": 5,
+            "contents_created": 3,
+            "campaigns_created": 2
         }
         
     except Exception as e:

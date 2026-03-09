@@ -1,9 +1,39 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, Sparkles, Video, ImageIcon, Wand2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Bot, Sparkles, Video, ImageIcon, Wand2, Play, Loader2, Coffee } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  const handleTryDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const response = await fetch(`${API}/api/demo/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to start demo");
+      }
+      
+      const data = await response.json();
+      login(data.token, data.user);
+      toast.success("Welcome to the demo! Explore Urban Brew Café's marketing dashboard.");
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      console.error("Demo login failed:", error);
+      toast.error("Failed to start demo. Please try again.");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -56,12 +86,38 @@ export default function LandingPage() {
                 Get Started Free
               </Button>
               <Button
+                data-testid="hero-try-demo-btn"
+                onClick={handleTryDemo}
+                disabled={demoLoading}
+                className="rounded-full px-8 py-6 text-base bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold shadow-lg shadow-orange-500/25 hover:scale-105 transition-all duration-200 hover:shadow-orange-500/40"
+              >
+                {demoLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Loading Demo...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Try Demo
+                  </>
+                )}
+              </Button>
+              <Button
                 onClick={() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })}
                 className="rounded-full px-8 py-6 text-base bg-white text-slate-900 border border-slate-200 font-medium hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
                 variant="outline"
               >
                 See How It Works
               </Button>
+            </div>
+
+            {/* Demo Badge */}
+            <div className="mt-8 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50 border border-amber-200">
+              <Coffee className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-700">
+                Try our demo with Urban Brew Café - no signup required!
+              </span>
             </div>
 
             <div className="mt-16 inline-block animate-bounce-slow">

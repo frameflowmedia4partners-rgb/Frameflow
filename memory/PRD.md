@@ -47,6 +47,24 @@ Frameflow is an AI-powered marketing operating system specifically for cafés an
 - Backend: 19/19 tests passed (100%)
 - Frontend: All P0 features verified working
 
+### ✅ Quick Demo Mode (COMPLETED - March 9, 2026)
+
+#### Demo Features
+- [x] "Try Demo" button on landing page (no signup required)
+- [x] Public `/api/demo/login` endpoint creates demo session
+- [x] Pre-populated "Urban Brew Café" brand with complete data:
+  - 4 marketing campaigns (Image, Video, Caption types)
+  - 5 saved marketing ideas (different categories)
+  - 3 generated content pieces
+  - 2 ad campaign strategies
+  - Full brand analysis data
+- [x] Toast notification welcomes demo users
+- [x] Demo user info shows in sidebar: "Demo Café Owner"
+
+#### Demo Credentials
+- Email: demo@frameflow.cafe
+- Password: FrameflowDemo2026
+
 ---
 
 ## Remaining Tasks
