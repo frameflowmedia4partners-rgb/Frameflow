@@ -22,6 +22,7 @@ import CreateAdCampaign from "@/pages/CreateAdCampaign";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AnalyticsDashboard from "@/pages/AnalyticsDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
+import ContentCommandCenter from "@/pages/ContentCommandCenter";
 
 // Protected Route component that uses AuthContext
 function ProtectedRoute({ children }) {
@@ -203,6 +204,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <IntegrationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/content"
+        element={
+          <ProtectedRoute>
+            <ContentCommandCenter />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/studio"
+        element={
+          <ProtectedRoute>
+            <ContentCommandCenter />
           </ProtectedRoute>
         }
       />

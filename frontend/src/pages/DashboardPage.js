@@ -58,7 +58,7 @@ export default function DashboardPage() {
   };
 
   const quickActions = [
-    { icon: Plus, label: "Create Post", desc: "Generate content", path: "/create", color: "bg-indigo-600" },
+    { icon: Plus, label: "Content Studio", desc: "Create with AI", path: "/content", color: "bg-indigo-600" },
     { icon: Calendar, label: "Schedule", desc: "Plan content", path: "/calendar", color: "bg-purple-600" },
     { icon: Target, label: "Run Ads", desc: "Launch campaign", path: "/ads/create", color: "bg-pink-600" },
     { icon: Upload, label: "Upload", desc: "Add media", path: "/media", color: "bg-amber-500" }
@@ -136,11 +136,11 @@ export default function DashboardPage() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   data-testid="dashboard-create-btn"
-                  onClick={() => navigate("/create")}
+                  onClick={() => navigate("/content")}
                   className="rounded-full px-6 py-6 bg-white text-indigo-600 font-semibold shadow-lg hover:scale-105 transition-all duration-200"
                 >
                   <Sparkles className="w-5 h-5 mr-2" />
-                  Create Content
+                  Content Studio
                 </Button>
                 <Button
                   onClick={() => navigate("/ideas")}

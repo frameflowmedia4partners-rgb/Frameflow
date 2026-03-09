@@ -3,7 +3,8 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { 
   Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, 
-  Calendar, History, Settings, LogOut, TrendingUp, Shield, BarChart3, Link2, Target 
+  Calendar, History, Settings, LogOut, TrendingUp, Shield, BarChart3, Link2, Target,
+  Wand2, Film
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -29,8 +30,8 @@ export default function Layout({ children }) {
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
     
     // Content Creation
+    { path: "/content", icon: Wand2, label: "Content Studio", testid: "nav-content-studio" },
     { path: "/ideas", icon: Sparkles, label: "Idea Engine", testid: "nav-ideas" },
-    { path: "/create", icon: Sparkles, label: "Create Content", testid: "nav-create" },
     { path: "/templates", icon: LayoutIcon, label: "Templates", testid: "nav-templates" },
     
     // Media & Assets
@@ -47,8 +48,7 @@ export default function Layout({ children }) {
     // Integrations
     { path: "/integrations", icon: Link2, label: "Integrations", testid: "nav-integrations" },
     
-    // History & Settings
-    { path: "/history", icon: History, label: "History", testid: "nav-history" },
+    // Settings
     { path: "/brand", icon: Settings, label: "Café Settings", testid: "nav-brand-settings" }
   ];
 
