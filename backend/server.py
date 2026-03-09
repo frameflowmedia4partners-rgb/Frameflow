@@ -118,6 +118,26 @@ class AdCampaignRequest(BaseModel):
     promotion_type: str
     location: str
 
+# Admin Models
+class AdminCreateUserRequest(BaseModel):
+    email: EmailStr
+    password: str
+    cafe_name: str
+
+class AdminUpdateUserRequest(BaseModel):
+    is_active: Optional[bool] = None
+    cafe_name: Optional[str] = None
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str
+
+# Helper function to check if user is admin
+async def get_admin_user(current_user: dict = Depends(get_current_user)):
+    user = await db.users.find_one({"id": current_user["user_id"]})
+    if not user or user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
 @api_router.post("/auth/signup", response_model=AuthResponse)
 async def signup(request: SignupRequest):
     existing_user = await db.users.find_one({"email": request.email})
@@ -148,11 +168,20 @@ async def login(request: LoginRequest):
     if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Check if user is active (admins and demo accounts are always active)
+    if user.get("role") != "admin" and not user.get("is_demo_account") and user.get("is_active") == False:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Please contact support.")
+    
     token = create_access_token({"sub": user["id"], "email": user["email"]})
     
     return AuthResponse(
         token=token,
-        user={"id": user["id"], "email": user["email"], "full_name": user.get("full_name")}
+        user={
+            "id": user["id"], 
+            "email": user["email"], 
+            "full_name": user.get("full_name"),
+            "role": user.get("role", "user")
+        }
     )
 
 @api_router.get("/auth/me")
@@ -160,6 +189,11 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     user = await db.users.find_one({"id": current_user["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # Ensure role is included
+    if "role" not in user:
+        user["role"] = "user"
+    
     return user
 
 @api_router.put("/auth/complete-onboarding")
@@ -169,6 +203,202 @@ async def complete_onboarding(current_user: dict = Depends(get_current_user)):
         {"$set": {"onboarding_completed": True}}
     )
     return {"success": True}
+
+# ==================== ADMIN ENDPOINTS ====================
+
+@api_router.get("/admin/users")
+async def admin_get_users(admin_user: dict = Depends(get_admin_user)):
+    """Get all users (admin only)"""
+    users = await db.users.find(
+        {"role": {"$ne": "admin"}},  # Exclude admin users from list
+        {"_id": 0, "password_hash": 0}
+    ).to_list(500)
+    
+    # Add brand info for each user
+    for user in users:
+        brand = await db.brands.find_one({"user_id": user["id"]}, {"_id": 0})
+        user["brand"] = brand
+    
+    return users
+
+@api_router.post("/admin/users")
+async def admin_create_user(request: AdminCreateUserRequest, admin_user: dict = Depends(get_admin_user)):
+    """Create a new café user (admin only)"""
+    existing_user = await db.users.find_one({"email": request.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "email": request.email,
+        "password_hash": hash_password(request.password),
+        "full_name": request.cafe_name,
+        "role": "user",
+        "is_active": True,
+        "onboarding_completed": False,
+        "created_by_admin": admin_user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create default brand for the café
+    brand_id = str(uuid.uuid4())
+    brand_doc = {
+        "id": brand_id,
+        "user_id": user_id,
+        "name": request.cafe_name,
+        "tone": "warm and inviting",
+        "industry": "café",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.brands.insert_one(brand_doc)
+    
+    return {
+        "success": True,
+        "user": {
+            "id": user_id,
+            "email": request.email,
+            "full_name": request.cafe_name,
+            "is_active": True
+        },
+        "brand_id": brand_id
+    }
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, admin_user: dict = Depends(get_admin_user)):
+    """Get a specific user (admin only)"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    brand = await db.brands.find_one({"user_id": user_id}, {"_id": 0})
+    user["brand"] = brand
+    
+    return user
+
+@api_router.put("/admin/users/{user_id}")
+async def admin_update_user(user_id: str, request: AdminUpdateUserRequest, admin_user: dict = Depends(get_admin_user)):
+    """Update user (activate/deactivate, update café name)"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Cannot modify admin users")
+    
+    update_data = {}
+    if request.is_active is not None:
+        update_data["is_active"] = request.is_active
+    if request.cafe_name is not None:
+        update_data["full_name"] = request.cafe_name
+        # Also update brand name
+        await db.brands.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": request.cafe_name}}
+        )
+    
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.users.update_one({"id": user_id}, {"$set": update_data})
+    
+    updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"success": True, "user": updated_user}
+
+@api_router.post("/admin/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: str, request: AdminResetPasswordRequest, admin_user: dict = Depends(get_admin_user)):
+    """Reset user password (admin only)"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Cannot reset admin password this way")
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "password_hash": hash_password(request.new_password),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Password reset successfully"}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin_user: dict = Depends(get_admin_user)):
+    """Delete a user and all their data (admin only)"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="Cannot delete admin users")
+    
+    # Delete user's brands, projects, contents, ideas, etc.
+    brands = await db.brands.find({"user_id": user_id}).to_list(100)
+    brand_ids = [b["id"] for b in brands]
+    
+    await db.projects.delete_many({"brand_id": {"$in": brand_ids}})
+    await db.contents.delete_many({"brand_id": {"$in": brand_ids}})
+    await db.ideas.delete_many({"brand_id": {"$in": brand_ids}})
+    await db.ad_campaigns.delete_many({"user_id": user_id})
+    await db.brands.delete_many({"user_id": user_id})
+    await db.users.delete_one({"id": user_id})
+    
+    return {"success": True, "message": "User and all associated data deleted"}
+
+@api_router.get("/admin/stats")
+async def admin_get_stats(admin_user: dict = Depends(get_admin_user)):
+    """Get platform statistics (admin only)"""
+    total_users = await db.users.count_documents({"role": {"$ne": "admin"}})
+    active_users = await db.users.count_documents({"role": {"$ne": "admin"}, "is_active": True})
+    total_brands = await db.brands.count_documents({})
+    total_projects = await db.projects.count_documents({})
+    total_contents = await db.contents.count_documents({})
+    
+    return {
+        "total_users": total_users,
+        "active_users": active_users,
+        "inactive_users": total_users - active_users,
+        "total_brands": total_brands,
+        "total_projects": total_projects,
+        "total_contents": total_contents
+    }
+
+@api_router.post("/admin/setup")
+async def admin_setup():
+    """Create initial admin account (one-time setup)"""
+    # Check if admin already exists
+    existing_admin = await db.users.find_one({"role": "admin"})
+    if existing_admin:
+        raise HTTPException(status_code=400, detail="Admin account already exists")
+    
+    admin_id = str(uuid.uuid4())
+    admin_doc = {
+        "id": admin_id,
+        "email": "admin@frameflow.cafe",
+        "password_hash": hash_password("FrameflowAdmin2026"),
+        "full_name": "Frameflow Admin",
+        "role": "admin",
+        "is_active": True,
+        "onboarding_completed": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(admin_doc)
+    
+    return {
+        "success": True,
+        "message": "Admin account created",
+        "credentials": {
+            "email": "admin@frameflow.cafe",
+            "password": "FrameflowAdmin2026"
+        }
+    }
+
+# ==================== END ADMIN ENDPOINTS ====================
 
 @api_router.post("/brands")
 async def create_brand(request: BrandRequest, current_user: dict = Depends(get_current_user)):

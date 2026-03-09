@@ -19,6 +19,7 @@ import BrandProfilePage from "@/pages/BrandProfilePage";
 import ProjectPage from "@/pages/ProjectPage";
 import MarketingDashboard from "@/pages/MarketingDashboard";
 import CreateAdCampaign from "@/pages/CreateAdCampaign";
+import AdminDashboard from "@/pages/AdminDashboard";
 
 // Protected Route component that uses AuthContext
 function ProtectedRoute({ children }) {
@@ -168,6 +169,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <CreateAdCampaign />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminDashboard />
           </ProtectedRoute>
         }
       />

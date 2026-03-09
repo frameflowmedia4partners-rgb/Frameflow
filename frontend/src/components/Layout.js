@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut, TrendingUp } from "lucide-react";
+import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut, TrendingUp, Shield } from "lucide-react";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
@@ -13,7 +13,15 @@ export default function Layout({ children }) {
     navigate("/", { replace: true });
   };
 
-  const navItems = [
+  const isAdmin = user?.role === "admin";
+
+  // Admin navigation items
+  const adminNavItems = [
+    { path: "/admin", icon: Shield, label: "Admin Dashboard", testid: "nav-admin" },
+  ];
+
+  // Regular user navigation items
+  const userNavItems = [
     { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
     { path: "/ideas", icon: Sparkles, label: "Idea Engine", testid: "nav-ideas" },
     { path: "/projects", icon: FolderKanban, label: "Projects", testid: "nav-projects" },
@@ -25,6 +33,9 @@ export default function Layout({ children }) {
     { path: "/history", icon: History, label: "History", testid: "nav-history" },
     { path: "/brand", icon: Settings, label: "Café Settings", testid: "nav-brand-settings" }
   ];
+
+  // Combine nav items based on user role
+  const navItems = isAdmin ? [...adminNavItems, ...userNavItems] : userNavItems;
 
   // If not authenticated, just render children (for public pages)
   if (!isAuthenticated) {
@@ -88,7 +99,14 @@ export default function Layout({ children }) {
         <div className="p-4 border-t border-slate-200">
           {user && (
             <div className="mb-3 px-2">
-              <p className="text-sm font-medium text-slate-900 truncate">{user.full_name || user.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-slate-900 truncate">{user.full_name || user.email}</p>
+                {isAdmin && (
+                  <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
+                    Admin
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-500 truncate">{user.email}</p>
             </div>
           )}

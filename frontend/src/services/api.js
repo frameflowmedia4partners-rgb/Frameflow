@@ -126,4 +126,16 @@ export const platformAPI = {
   batch: (data) => api.post("/generate/batch", data),
 };
 
+// Admin APIs
+export const adminAPI = {
+  getUsers: () => api.get("/admin/users"),
+  getUser: (userId) => api.get(`/admin/users/${userId}`),
+  createUser: (data) => api.post("/admin/users", data),
+  updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
+  resetPassword: (userId, newPassword) => api.post(`/admin/users/${userId}/reset-password`, { new_password: newPassword }),
+  deleteUser: (userId) => api.delete(`/admin/users/${userId}`),
+  getStats: () => api.get("/admin/stats"),
+  setup: () => api.post("/admin/setup"),
+};
+
 export default api;
