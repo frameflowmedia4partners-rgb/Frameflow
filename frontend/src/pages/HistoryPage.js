@@ -1,17 +1,17 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Image, Video, FileText, Copy, Download, History as HistoryIcon } from "lucide-react";
+import { Image, Video, FileText, Copy, Download, History as HistoryIcon, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { projectAPI, contentAPI } from "@/services/api";
 
 export default function HistoryPage() {
   const [allContents, setAllContents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadHistory();
@@ -19,20 +19,21 @@ export default function HistoryPage() {
 
   const loadHistory = async () => {
     try {
-      const projectsRes = await axios.get(`${API}/projects`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      setLoading(true);
+      setError(null);
+      
+      const projectsRes = await projectAPI.getAll();
 
       const contentPromises = projectsRes.data.map(project =>
-        axios.get(`${API}/contents/${project.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        contentAPI.getByProject(project.id).catch(() => ({ data: [] }))
       );
 
       const contentsResponses = await Promise.all(contentPromises);
       const allContent = contentsResponses.flatMap(res => res.data);
       setAllContents(allContent);
     } catch (error) {
+      console.error("Failed to load history:", error);
+      setError("Failed to load content history");
       toast.error("Failed to load history");
     } finally {
       setLoading(false);
@@ -72,6 +73,7 @@ export default function HistoryPage() {
               {content.type === "image" && <Image className="w-5 h-5 text-indigo-600" />}
               {content.type === "video" && <Video className="w-5 h-5 text-indigo-600" />}
               {content.type === "caption" && <FileText className="w-5 h-5 text-indigo-600" />}
+              {!["image", "video", "caption"].includes(content.type) && <FileText className="w-5 h-5 text-indigo-600" />}
             </div>
             <div>
               <span className="font-semibold text-slate-900 capitalize">{content.type}</span>
@@ -146,10 +148,23 @@ export default function HistoryPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <HistoryIcon className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading content history..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadHistory} className="rounded-full px-6">
+            Try Again
+          </Button>
         </div>
       </Layout>
     );
@@ -160,7 +175,7 @@ export default function HistoryPage() {
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Content History</h1>
-          <p className="text-lg text-slate-600">View and manage all your generated content</p>
+          <p className="text-lg text-slate-600">View and manage all your generated café content</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

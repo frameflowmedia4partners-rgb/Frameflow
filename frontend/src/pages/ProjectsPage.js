@@ -1,23 +1,24 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
+import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Layout from "@/components/Layout";
-import { Plus, FolderKanban, Image, Video, FileText } from "lucide-react";
+import { Plus, FolderKanban, Image, Video, FileText, AlertCircle, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { projectAPI, brandAPI } from "@/services/api";
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState([]);
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", type: "image", brand_id: "" });
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadData();
@@ -25,16 +26,23 @@ export default function ProjectsPage() {
 
   const loadData = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const [projectsRes, brandsRes] = await Promise.all([
-        axios.get(`${API}/projects`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/brands`, { headers: { Authorization: `Bearer ${token}` } })
+        projectAPI.getAll(),
+        brandAPI.getAll()
       ]);
+      
       setProjects(projectsRes.data);
       setBrands(brandsRes.data);
+      
       if (brandsRes.data.length > 0) {
         setNewProject(prev => ({ ...prev, brand_id: brandsRes.data[0].id }));
       }
     } catch (error) {
+      console.error("Failed to load projects:", error);
+      setError("Failed to load projects");
       toast.error("Failed to load projects");
     } finally {
       setLoading(false);
@@ -42,21 +50,28 @@ export default function ProjectsPage() {
   };
 
   const handleCreateProject = async () => {
-    if (!newProject.name) {
+    if (!newProject.name.trim()) {
       toast.error("Please enter a project name");
       return;
     }
 
+    if (!newProject.brand_id) {
+      toast.error("Please select a brand");
+      return;
+    }
+
+    setCreating(true);
     try {
-      await axios.post(`${API}/projects`, newProject, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Project created!");
+      await projectAPI.create(newProject);
+      toast.success("Campaign created!");
       setShowCreateDialog(false);
       setNewProject({ name: "", type: "image", brand_id: brands[0]?.id || "" });
       loadData();
     } catch (error) {
-      toast.error("Failed to create project");
+      console.error("Failed to create project:", error);
+      toast.error("Failed to create campaign");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -72,10 +87,23 @@ export default function ProjectsPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <FolderKanban className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading campaigns..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadData} className="rounded-full px-6">
+            Try Again
+          </Button>
         </div>
       </Layout>
     );
@@ -86,8 +114,8 @@ export default function ProjectsPage() {
       <div className="p-8">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Projects</h1>
-            <p className="text-lg text-slate-600">Manage your marketing campaigns</p>
+            <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Campaigns</h1>
+            <p className="text-lg text-slate-600">Manage your café marketing campaigns</p>
           </div>
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
@@ -96,22 +124,23 @@ export default function ProjectsPage() {
                 className="rounded-full px-6 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all"
               >
                 <Plus className="w-5 h-5 mr-2" />
-                New Project
+                New Campaign
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="font-outfit text-2xl">Create New Project</DialogTitle>
+                <DialogTitle className="font-outfit text-2xl">Create New Campaign</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div>
-                  <Label>Project Name</Label>
+                  <Label>Campaign Name</Label>
                   <Input
                     data-testid="project-name-input"
                     value={newProject.name}
                     onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
                     placeholder="Summer Campaign 2026"
                     className="mt-2"
+                    disabled={creating}
                   />
                 </div>
                 <div>
@@ -121,6 +150,7 @@ export default function ProjectsPage() {
                     value={newProject.type}
                     onChange={(e) => setNewProject({ ...newProject, type: e.target.value })}
                     className="w-full mt-2 rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3"
+                    disabled={creating}
                   >
                     <option value="image">Image Post</option>
                     <option value="video">Video/Reel</option>
@@ -129,11 +159,12 @@ export default function ProjectsPage() {
                 </div>
                 {brands.length > 0 && (
                   <div>
-                    <Label>Brand</Label>
+                    <Label>Café</Label>
                     <select
                       value={newProject.brand_id}
                       onChange={(e) => setNewProject({ ...newProject, brand_id: e.target.value })}
                       className="w-full mt-2 rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3"
+                      disabled={creating}
                     >
                       {brands.map((brand) => (
                         <option key={brand.id} value={brand.id}>{brand.name}</option>
@@ -144,9 +175,17 @@ export default function ProjectsPage() {
                 <Button
                   data-testid="create-project-submit-btn"
                   onClick={handleCreateProject}
+                  disabled={creating}
                   className="w-full rounded-full py-6 bg-indigo-600"
                 >
-                  Create Project
+                  {creating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Campaign"
+                  )}
                 </Button>
               </div>
             </DialogContent>
@@ -193,13 +232,13 @@ export default function ProjectsPage() {
             <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
               <FolderKanban className="w-12 h-12 text-indigo-600" />
             </div>
-            <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">No projects yet</h2>
-            <p className="text-slate-600 mb-6">Create your first project to organize your content</p>
+            <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">No campaigns yet</h2>
+            <p className="text-slate-600 mb-6">Create your first campaign to organize your café content</p>
             <Button
               onClick={() => setShowCreateDialog(true)}
               className="rounded-full px-8 py-3 bg-indigo-600 text-white font-semibold"
             >
-              Create Your First Project
+              Create Your First Campaign
             </Button>
           </div>
         )}

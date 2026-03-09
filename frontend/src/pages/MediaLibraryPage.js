@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Upload, Image as ImageIcon, Video, Trash2 } from "lucide-react";
+import { Upload, Image as ImageIcon, Video, Trash2, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { mediaAPI, brandAPI } from "@/services/api";
 
 export default function MediaLibraryPage() {
   const [media, setMedia] = useState([]);
@@ -13,8 +13,8 @@ export default function MediaLibraryPage() {
   const [selectedBrand, setSelectedBrand] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadData();
@@ -22,16 +22,22 @@ export default function MediaLibraryPage() {
 
   const loadData = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const [mediaRes, brandsRes] = await Promise.all([
-        axios.get(`${API}/media`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/brands`, { headers: { Authorization: `Bearer ${token}` } })
+        mediaAPI.getAll(),
+        brandAPI.getAll()
       ]);
+      
       setMedia(mediaRes.data);
       setBrands(brandsRes.data);
       if (brandsRes.data.length > 0) {
         setSelectedBrand(brandsRes.data[0].id);
       }
     } catch (error) {
+      console.error("Failed to load media:", error);
+      setError("Failed to load media library");
       toast.error("Failed to load media");
     } finally {
       setLoading(false);
@@ -43,7 +49,7 @@ export default function MediaLibraryPage() {
     if (!file) return;
 
     if (!selectedBrand) {
-      toast.error("Please select a brand first");
+      toast.error("Please select a café first");
       return;
     }
 
@@ -59,22 +65,19 @@ export default function MediaLibraryPage() {
         const base64Data = event.target.result;
         const fileType = file.type.startsWith("image") ? "image" : file.type.startsWith("video") ? "video" : "other";
 
-        await axios.post(
-          `${API}/media/upload`,
-          {
-            file_name: file.name,
-            file_data: base64Data,
-            file_type: fileType,
-            brand_id: selectedBrand
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await mediaAPI.upload({
+          file_name: file.name,
+          file_data: base64Data,
+          file_type: fileType,
+          brand_id: selectedBrand
+        });
 
         toast.success("Media uploaded successfully!");
         loadData();
       };
       reader.readAsDataURL(file);
     } catch (error) {
+      console.error("Failed to upload:", error);
       toast.error("Failed to upload media");
     } finally {
       setUploading(false);
@@ -85,12 +88,11 @@ export default function MediaLibraryPage() {
     if (!confirm("Are you sure you want to delete this media?")) return;
 
     try {
-      await axios.delete(`${API}/media/${mediaId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await mediaAPI.delete(mediaId);
       toast.success("Media deleted!");
       loadData();
     } catch (error) {
+      console.error("Failed to delete:", error);
       toast.error("Failed to delete media");
     }
   };
@@ -98,10 +100,23 @@ export default function MediaLibraryPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <ImageIcon className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading media library..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadData} className="rounded-full px-6">
+            Try Again
+          </Button>
         </div>
       </Layout>
     );
@@ -113,7 +128,7 @@ export default function MediaLibraryPage() {
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Media Library</h1>
-            <p className="text-lg text-slate-600">Upload and manage your brand assets</p>
+            <p className="text-lg text-slate-600">Upload and manage your café assets</p>
           </div>
           <div className="flex items-center gap-4">
             {brands.length > 0 && (
@@ -121,6 +136,7 @@ export default function MediaLibraryPage() {
                 value={selectedBrand}
                 onChange={(e) => setSelectedBrand(e.target.value)}
                 className="rounded-xl border-slate-200 bg-white px-4 py-3"
+                disabled={uploading}
               >
                 {brands.map((brand) => (
                   <option key={brand.id} value={brand.id}>
@@ -136,8 +152,17 @@ export default function MediaLibraryPage() {
                 className="rounded-full px-8 py-3 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
                 onClick={() => document.getElementById("file-upload").click()}
               >
-                <Upload className="w-5 h-5 mr-2" />
-                {uploading ? "Uploading..." : "Upload Media"}
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    Upload Media
+                  </>
+                )}
               </Button>
               <input
                 id="file-upload"
@@ -197,7 +222,7 @@ export default function MediaLibraryPage() {
               <ImageIcon className="w-12 h-12 text-indigo-600" />
             </div>
             <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">No media yet</h2>
-            <p className="text-slate-600 mb-6">Upload logos, images, and videos to use in your content</p>
+            <p className="text-slate-600 mb-6">Upload logos, images, and videos to use in your café content</p>
             <label htmlFor="file-upload-empty">
               <Button
                 onClick={() => document.getElementById("file-upload-empty").click()}

@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, DollarSign, Users, Eye, PlayCircle, PauseCircle } from "lucide-react";
+import { TrendingUp, DollarSign, Users, Eye, PlayCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { adsAPI } from "@/services/api";
 
 export default function MarketingDashboard() {
   const [campaigns, setCampaigns] = useState([]);
   const [stats, setStats] = useState({ active_campaigns: 0, total_spend: 0, total_reach: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadMarketingData();
@@ -20,9 +20,10 @@ export default function MarketingDashboard() {
 
   const loadMarketingData = async () => {
     try {
-      const campaignsRes = await axios.get(`${API}/ads/campaigns`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      setLoading(true);
+      setError(null);
+      
+      const campaignsRes = await adsAPI.getCampaigns();
       
       setCampaigns(campaignsRes.data);
       
@@ -36,6 +37,8 @@ export default function MarketingDashboard() {
         total_reach: activeCampaigns * 5000 // Simulated
       });
     } catch (error) {
+      console.error("Failed to load marketing data:", error);
+      setError("Failed to load marketing data");
       toast.error("Failed to load marketing data");
     } finally {
       setLoading(false);
@@ -45,10 +48,23 @@ export default function MarketingDashboard() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <TrendingUp className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading marketing dashboard..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadMarketingData} className="rounded-full px-6">
+            Try Again
+          </Button>
         </div>
       </Layout>
     );
@@ -63,6 +79,7 @@ export default function MarketingDashboard() {
             <p className="text-lg text-slate-600">Track your café marketing performance</p>
           </div>
           <Button
+            data-testid="create-ad-btn"
             onClick={() => navigate("/ads/create")}
             className="rounded-full px-8 py-3 bg-indigo-600 text-white font-semibold shadow-lg hover:scale-105 transition-all"
           >
@@ -112,6 +129,7 @@ export default function MarketingDashboard() {
               {campaigns.map((campaign) => (
                 <div
                   key={campaign.id}
+                  data-testid={`campaign-item-${campaign.id}`}
                   className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex-1">

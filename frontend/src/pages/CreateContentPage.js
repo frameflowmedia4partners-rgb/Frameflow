@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Sparkles, Loader2, Download, Copy, RefreshCw, Image as ImageIcon, Video, FileText } from "lucide-react";
+import { Bot, Sparkles, Loader2, Download, Copy, RefreshCw, Image as ImageIcon, Video, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { brandAPI, projectAPI, templateAPI, contentAPI } from "@/services/api";
 
 export default function CreateContentPage() {
   const [brands, setBrands] = useState([]);
@@ -18,6 +18,8 @@ export default function CreateContentPage() {
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
   const [contentType, setContentType] = useState("caption");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Prompt builder fields
   const [goal, setGoal] = useState("promotion");
@@ -38,7 +40,6 @@ export default function CreateContentPage() {
   const [editing, setEditing] = useState(false);
   
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadData();
@@ -64,11 +65,15 @@ export default function CreateContentPage() {
 
   const loadData = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const [brandsRes, projectsRes, templatesRes] = await Promise.all([
-        axios.get(`${API}/brands`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/projects`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/templates`, { headers: { Authorization: `Bearer ${token}` } })
+        brandAPI.getAll(),
+        projectAPI.getAll(),
+        templateAPI.getAll()
       ]);
+      
       setBrands(brandsRes.data);
       setProjects(projectsRes.data);
       setTemplates(templatesRes.data);
@@ -77,7 +82,11 @@ export default function CreateContentPage() {
         setSelectedBrand(brandsRes.data[0].id);
       }
     } catch (error) {
+      console.error("Failed to load data:", error);
+      setError("Failed to load data");
       toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -91,7 +100,7 @@ Platform: ${platform}
 Tone: ${tone}
 Style: ${contentStyle}
 
-Create ${contentType} content for this brand.`;
+Create ${contentType} content for this café.`;
   };
 
   const handleGenerate = async () => {
@@ -109,45 +118,39 @@ Create ${contentType} content for this brand.`;
       let response;
       
       if (contentType === "caption") {
-        response = await axios.post(
-          `${API}/generate/caption`,
-          {
-            prompt,
-            brand_id: selectedBrand,
-            project_id: selectedProject || undefined,
-            platform,
-            tone,
-            type: "caption"
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        response = await contentAPI.generateCaption({
+          prompt,
+          brand_id: selectedBrand,
+          project_id: selectedProject || undefined,
+          platform,
+          tone,
+          type: "caption"
+        });
         setResult({ type: "caption", content: response.data.caption });
         setCurrentContentId(response.data.content_id);
         toast.success("Caption generated!");
         
       } else if (contentType === "image") {
         toast.info("Generating image... This may take up to 60 seconds");
-        response = await axios.post(
-          `${API}/generate/image`,
-          { prompt, project_id: selectedProject || undefined },
-          { headers: { Authorization: `Bearer ${token}` }, timeout: 90000 }
-        );
+        response = await contentAPI.generateImage({ prompt, project_id: selectedProject || undefined });
         setResult({ type: "image", content: response.data.image_url });
         setCurrentContentId(response.data.content_id);
         toast.success("Image generated!");
         
       } else if (contentType === "video") {
         toast.info("Generating video... This may take up to 10 minutes");
-        response = await axios.post(
-          `${API}/generate/video`,
-          { prompt, project_id: selectedProject || undefined, duration: 4, size: "1280x720" },
-          { headers: { Authorization: `Bearer ${token}` }, timeout: 600000 }
-        );
+        response = await contentAPI.generateVideo({ 
+          prompt, 
+          project_id: selectedProject || undefined, 
+          duration: 4, 
+          size: "1280x720" 
+        });
         setResult({ type: "video", content: response.data.video_url });
         setCurrentContentId(response.data.content_id);
         toast.success("Video generated!");
       }
     } catch (error) {
+      console.error("Generation failed:", error);
       toast.error(error.response?.data?.detail || "Generation failed");
     } finally {
       setGenerating(false);
@@ -167,15 +170,12 @@ Create ${contentType} content for this brand.`;
 
     setEditing(true);
     try {
-      const response = await axios.post(
-        `${API}/contents/${currentContentId}/edit?edit_prompt=${encodeURIComponent(editCommand)}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await contentAPI.edit(currentContentId, editCommand);
       setResult({ ...result, content: response.data.edited_content });
       setEditCommand("");
       toast.success("Content edited!");
     } catch (error) {
+      console.error("Failed to edit:", error);
       toast.error("Failed to edit content");
     } finally {
       setEditing(false);
@@ -212,6 +212,31 @@ Create ${contentType} content for this brand.`;
     toast.success("Downloaded!");
   };
 
+  if (loading) {
+    return (
+      <Layout>
+        <LoadingSpinner message="Loading content studio..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadData} className="rounded-full px-6">
+            Try Again
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="h-[calc(100vh-4rem)] overflow-hidden">
@@ -226,7 +251,7 @@ Create ${contentType} content for this brand.`;
             <div className="space-y-4 mb-6">
               {brands.length > 0 && (
                 <div>
-                  <Label className="text-sm font-semibold text-slate-700 mb-2 block">Brand</Label>
+                  <Label className="text-sm font-semibold text-slate-700 mb-2 block">Café</Label>
                   <select
                     value={selectedBrand}
                     onChange={(e) => setSelectedBrand(e.target.value)}
@@ -241,13 +266,13 @@ Create ${contentType} content for this brand.`;
               
               {projects.length > 0 && (
                 <div>
-                  <Label className="text-sm font-semibold text-slate-700 mb-2 block">Project (Optional)</Label>
+                  <Label className="text-sm font-semibold text-slate-700 mb-2 block">Campaign (Optional)</Label>
                   <select
                     value={selectedProject}
                     onChange={(e) => setSelectedProject(e.target.value)}
                     className="w-full rounded-xl border-slate-200 bg-slate-50 px-4 py-2"
                   >
-                    <option value="">No Project</option>
+                    <option value="">No Campaign</option>
                     {projects.map((project) => (
                       <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
@@ -287,7 +312,7 @@ Create ${contentType} content for this brand.`;
                 <Input
                   value={product}
                   onChange={(e) => setProduct(e.target.value)}
-                  placeholder="e.g., Espresso machine"
+                  placeholder="e.g., Pumpkin Spice Latte"
                   className="text-sm"
                 />
               </div>
@@ -297,7 +322,7 @@ Create ${contentType} content for this brand.`;
                 <Input
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
-                  placeholder="e.g., Coffee enthusiasts"
+                  placeholder="e.g., Coffee lovers, Remote workers"
                   className="text-sm"
                 />
               </div>
@@ -327,8 +352,8 @@ Create ${contentType} content for this brand.`;
                   <option value="engaging">Engaging</option>
                   <option value="professional">Professional</option>
                   <option value="playful">Playful</option>
-                  <option value="luxury">Luxury</option>
-                  <option value="bold">Bold</option>
+                  <option value="cozy">Cozy & Warm</option>
+                  <option value="trendy">Trendy</option>
                 </select>
               </div>
 
@@ -379,6 +404,7 @@ Create ${contentType} content for this brand.`;
 
             {/* Generate Button */}
             <Button
+              data-testid="generate-content-btn"
               onClick={handleGenerate}
               disabled={generating}
               className="w-full mt-6 rounded-full py-6 bg-indigo-600 text-white font-semibold shadow-lg hover:scale-105 transition-all"
@@ -421,7 +447,7 @@ Create ${contentType} content for this brand.`;
                     <Sparkles className="w-16 h-16 text-indigo-600" />
                   </div>
                   <h3 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">Ready to Create</h3>
-                  <p className="text-slate-600">Configure your settings and generate content</p>
+                  <p className="text-slate-600">Configure your settings and generate café content</p>
                 </div>
               )}
 
@@ -431,7 +457,7 @@ Create ${contentType} content for this brand.`;
                     <Bot className="w-16 h-16 text-white" />
                   </div>
                   <h3 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">Framey is creating...</h3>
-                  <p className="text-slate-600">Your content will appear here</p>
+                  <p className="text-slate-600">Your café content will appear here</p>
                 </div>
               )}
 
@@ -489,13 +515,20 @@ Create ${contentType} content for this brand.`;
                     className="w-full rounded-lg bg-purple-600 text-white"
                     size="sm"
                   >
-                    {editing ? "Editing..." : "Apply Edit"}
+                    {editing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Editing...
+                      </>
+                    ) : (
+                      "Apply Edit"
+                    )}
                   </Button>
                 </div>
                 
                 <div className="mt-3 space-y-1">
                   <p className="text-xs text-slate-500 font-semibold">Quick Edits:</p>
-                  {["Make it shorter", "Add emojis", "More professional", "Add hashtags"].map((cmd) => (
+                  {["Make it shorter", "Add emojis", "More café-focused", "Add hashtags"].map((cmd) => (
                     <button
                       key={cmd}
                       onClick={() => setEditCommand(cmd)}
@@ -515,6 +548,7 @@ Create ${contentType} content for this brand.`;
                 <div className="space-y-2">
                   {result.type === "caption" && (
                     <Button
+                      data-testid="copy-caption-btn"
                       onClick={handleCopyCaption}
                       variant="outline"
                       className="w-full rounded-lg justify-start"
@@ -525,6 +559,7 @@ Create ${contentType} content for this brand.`;
                   )}
                   
                   <Button
+                    data-testid="download-btn"
                     onClick={handleDownload}
                     variant="outline"
                     className="w-full rounded-lg justify-start"

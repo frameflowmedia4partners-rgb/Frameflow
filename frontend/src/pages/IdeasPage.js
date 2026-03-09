@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Lightbulb, Heart, X, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Lightbulb, Heart, X, Sparkles, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { brandAPI, ideaAPI } from "@/services/api";
 
 export default function IdeasPage() {
   const [brands, setBrands] = useState([]);
@@ -13,9 +13,10 @@ export default function IdeasPage() {
   const [currentIdea, setCurrentIdea] = useState(null);
   const [savedIdeas, setSavedIdeas] = useState([]);
   const [generating, setGenerating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [ideaType, setIdeaType] = useState("general");
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadData();
@@ -23,27 +24,29 @@ export default function IdeasPage() {
 
   const loadData = async () => {
     try {
-      const brandsRes = await axios.get(`${API}/brands`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      setLoading(true);
+      setError(null);
+      const brandsRes = await brandAPI.getAll();
       setBrands(brandsRes.data);
       if (brandsRes.data.length > 0) {
         setSelectedBrand(brandsRes.data[0].id);
-        loadSavedIdeas(brandsRes.data[0].id);
+        await loadSavedIdeas(brandsRes.data[0].id);
       }
     } catch (error) {
+      console.error("Failed to load brands:", error);
+      setError("Failed to load data");
       toast.error("Failed to load brands");
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadSavedIdeas = async (brandId) => {
     try {
-      const response = await axios.get(`${API}/ideas?brand_id=${brandId}&status=saved`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await ideaAPI.getAll(brandId, "saved");
       setSavedIdeas(response.data);
     } catch (error) {
-      console.error("Failed to load saved ideas");
+      console.error("Failed to load saved ideas:", error);
     }
   };
 
@@ -55,13 +58,10 @@ export default function IdeasPage() {
 
     setGenerating(true);
     try {
-      const response = await axios.post(
-        `${API}/ideas/generate`,
-        { brand_id: selectedBrand, idea_type: ideaType },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await ideaAPI.generate(selectedBrand, ideaType);
       setCurrentIdea(response.data);
     } catch (error) {
+      console.error("Failed to generate idea:", error);
       toast.error("Failed to generate idea");
     } finally {
       setGenerating(false);
@@ -72,20 +72,13 @@ export default function IdeasPage() {
     if (!currentIdea) return;
 
     try {
-      await axios.post(
-        `${API}/ideas/save`,
-        {
-          brand_id: selectedBrand,
-          idea_text: currentIdea.idea_text,
-          idea_type: currentIdea.idea_type
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await ideaAPI.save(selectedBrand, currentIdea.idea_text, currentIdea.idea_type);
       toast.success("Idea saved!");
-      loadSavedIdeas(selectedBrand);
+      await loadSavedIdeas(selectedBrand);
       setCurrentIdea(null);
       generateNewIdea();
     } catch (error) {
+      console.error("Failed to save idea:", error);
       toast.error("Failed to save idea");
     }
   };
@@ -111,12 +104,37 @@ export default function IdeasPage() {
     { value: "promotion", label: "Promotion" }
   ];
 
+  if (loading) {
+    return (
+      <Layout>
+        <LoadingSpinner message="Loading idea engine..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadData} className="rounded-full px-6">
+            Try Again
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Idea Engine</h1>
-          <p className="text-lg text-slate-600">AI-powered marketing ideas for your brand</p>
+          <p className="text-lg text-slate-600">AI-powered café marketing ideas</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -157,8 +175,8 @@ export default function IdeasPage() {
                   <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center mb-6 animate-bounce-slow">
                     <Lightbulb className="w-12 h-12 text-indigo-600" />
                   </div>
-                  <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">Ready for ideas?</h2>
-                  <p className="text-slate-600 mb-6">Let Framey generate creative marketing ideas for you</p>
+                  <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">Ready for café ideas?</h2>
+                  <p className="text-slate-600 mb-6">Let Framey generate creative marketing ideas for your café</p>
                   <Button
                     data-testid="generate-idea-btn"
                     onClick={generateNewIdea}
@@ -173,7 +191,7 @@ export default function IdeasPage() {
               {generating && (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
-                  <p className="text-slate-600">Generating your next great idea...</p>
+                  <p className="text-slate-600">Generating your next great café idea...</p>
                 </div>
               )}
 

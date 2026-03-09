@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Rocket, Loader2 } from "lucide-react";
+import { Rocket, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { brandAPI, adsAPI } from "@/services/api";
 
 export default function CreateAdCampaign() {
   const [brands, setBrands] = useState([]);
@@ -18,11 +17,13 @@ export default function CreateAdCampaign() {
   const [dailyBudget, setDailyBudget] = useState("10");
   const [promotionType, setPromotionType] = useState("");
   const [location, setLocation] = useState("");
+  const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [error, setError] = useState(null);
   const [strategy, setStrategy] = useState(null);
   const [campaignId, setCampaignId] = useState(null);
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadBrands();
@@ -30,15 +31,19 @@ export default function CreateAdCampaign() {
 
   const loadBrands = async () => {
     try {
-      const response = await axios.get(`${API}/brands`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      setLoading(true);
+      setError(null);
+      const response = await brandAPI.getAll();
       setBrands(response.data);
       if (response.data.length > 0) {
         setSelectedBrand(response.data[0].id);
       }
     } catch (error) {
+      console.error("Failed to load brands:", error);
+      setError("Failed to load data");
       toast.error("Failed to load brands");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -50,23 +55,20 @@ export default function CreateAdCampaign() {
 
     setGenerating(true);
     try {
-      const response = await axios.post(
-        `${API}/ads/campaign/strategy`,
-        {
-          brand_id: selectedBrand,
-          campaign_goal: campaignGoal,
-          target_audience: targetAudience,
-          daily_budget: parseFloat(dailyBudget),
-          promotion_type: promotionType,
-          location: location
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await adsAPI.createStrategy({
+        brand_id: selectedBrand,
+        campaign_goal: campaignGoal,
+        target_audience: targetAudience,
+        daily_budget: parseFloat(dailyBudget),
+        promotion_type: promotionType,
+        location: location
+      });
       
       setStrategy(response.data.strategy);
       setCampaignId(response.data.campaign_id);
       toast.success("Campaign strategy generated!");
     } catch (error) {
+      console.error("Failed to generate strategy:", error);
       toast.error("Failed to generate strategy");
     } finally {
       setGenerating(false);
@@ -76,24 +78,57 @@ export default function CreateAdCampaign() {
   const handleLaunchCampaign = async () => {
     if (!campaignId) return;
 
+    setLaunching(true);
     try {
-      await axios.post(
-        `${API}/ads/campaign/${campaignId}/launch`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await adsAPI.launchCampaign(campaignId);
       
       toast.success("Campaign launched successfully!");
       navigate("/marketing");
     } catch (error) {
+      console.error("Failed to launch campaign:", error);
       toast.error("Failed to launch campaign");
+    } finally {
+      setLaunching(false);
     }
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <LoadingSpinner message="Loading..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadBrands} className="rounded-full px-6">
+            Try Again
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="p-8">
         <div className="mb-8">
+          <Button
+            onClick={() => navigate("/marketing")}
+            variant="ghost"
+            className="mb-4 -ml-2"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Marketing
+          </Button>
           <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">Create Ad Campaign</h1>
           <p className="text-lg text-slate-600">AI-powered campaign strategy for your café</p>
         </div>
@@ -106,11 +141,12 @@ export default function CreateAdCampaign() {
             <div className="space-y-5">
               {brands.length > 0 && (
                 <div>
-                  <Label>Café Brand</Label>
+                  <Label>Café</Label>
                   <select
                     value={selectedBrand}
                     onChange={(e) => setSelectedBrand(e.target.value)}
                     className="w-full mt-2 rounded-xl border-slate-200 bg-slate-50 px-4 py-3"
+                    disabled={generating}
                   >
                     {brands.map((brand) => (
                       <option key={brand.id} value={brand.id}>{brand.name}</option>
@@ -125,6 +161,7 @@ export default function CreateAdCampaign() {
                   value={campaignGoal}
                   onChange={(e) => setCampaignGoal(e.target.value)}
                   className="w-full mt-2 rounded-xl border-slate-200 bg-slate-50 px-4 py-3"
+                  disabled={generating}
                 >
                   <option value="engagement">Engagement</option>
                   <option value="traffic">Website Traffic</option>
@@ -140,6 +177,7 @@ export default function CreateAdCampaign() {
                   onChange={(e) => setTargetAudience(e.target.value)}
                   placeholder="e.g., Coffee lovers aged 25-45"
                   className="mt-2"
+                  disabled={generating}
                 />
               </div>
 
@@ -151,6 +189,7 @@ export default function CreateAdCampaign() {
                   onChange={(e) => setDailyBudget(e.target.value)}
                   placeholder="10"
                   className="mt-2"
+                  disabled={generating}
                 />
               </div>
 
@@ -161,6 +200,7 @@ export default function CreateAdCampaign() {
                   onChange={(e) => setPromotionType(e.target.value)}
                   placeholder="e.g., New Seasonal Drink Launch"
                   className="mt-2"
+                  disabled={generating}
                 />
               </div>
 
@@ -171,10 +211,12 @@ export default function CreateAdCampaign() {
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="e.g., Downtown Seattle, 5-mile radius"
                   className="mt-2"
+                  disabled={generating}
                 />
               </div>
 
               <Button
+                data-testid="generate-strategy-btn"
                 onClick={handleGenerateStrategy}
                 disabled={generating}
                 className="w-full rounded-full py-6 bg-indigo-600 text-white font-semibold shadow-lg hover:scale-105 transition-all"
@@ -218,11 +260,22 @@ export default function CreateAdCampaign() {
                 </div>
 
                 <Button
+                  data-testid="launch-campaign-btn"
                   onClick={handleLaunchCampaign}
+                  disabled={launching}
                   className="w-full rounded-full py-6 bg-green-600 text-white font-semibold shadow-lg hover:scale-105 transition-all"
                 >
-                  <Rocket className="w-5 h-5 mr-2" />
-                  Launch Campaign
+                  {launching ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Launching...
+                    </>
+                  ) : (
+                    <>
+                      <Rocket className="w-5 h-5 mr-2" />
+                      Launch Campaign
+                    </>
+                  )}
                 </Button>
               </div>
             )}

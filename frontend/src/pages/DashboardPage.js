@@ -1,21 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
+import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Plus, Image, Video, FileText, TrendingUp } from "lucide-react";
+import { Plus, Image, Video, FileText, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { brandAPI, projectAPI, statsAPI, contentAPI } from "@/services/api";
 
 export default function DashboardPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [brands, setBrands] = useState([]);
   const [projects, setProjects] = useState([]);
   const [recentContent, setRecentContent] = useState([]);
   const [stats, setStats] = useState({ brands: 0, projects: 0, contents_generated: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadDashboardData();
@@ -23,26 +24,33 @@ export default function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [userRes, brandsRes, projectsRes, statsRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/brands`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/projects`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/stats`, { headers: { Authorization: `Bearer ${token}` } })
+      setLoading(true);
+      setError(null);
+      
+      const [brandsRes, projectsRes, statsRes] = await Promise.all([
+        brandAPI.getAll(),
+        projectAPI.getAll(),
+        statsAPI.get()
       ]);
 
-      setUser(userRes.data);
       setBrands(brandsRes.data);
       setProjects(projectsRes.data);
       setStats(statsRes.data);
 
+      // Load recent content from first project
       if (projectsRes.data.length > 0) {
-        const recentProject = projectsRes.data[0];
-        const contentsRes = await axios.get(`${API}/contents/${recentProject.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setRecentContent(contentsRes.data.slice(0, 3));
+        try {
+          const recentProject = projectsRes.data[0];
+          const contentsRes = await contentAPI.getByProject(recentProject.id);
+          setRecentContent(contentsRes.data.slice(0, 3));
+        } catch {
+          // Silently handle - recent content is not critical
+          setRecentContent([]);
+        }
       }
     } catch (error) {
+      console.error("Failed to load dashboard:", error);
+      setError("Failed to load dashboard data");
       toast.error("Failed to load dashboard");
     } finally {
       setLoading(false);
@@ -52,10 +60,23 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <TrendingUp className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading your café dashboard..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load Dashboard</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <Button onClick={loadDashboardData} className="rounded-full px-6">
+            Try Again
+          </Button>
         </div>
       </Layout>
     );
@@ -66,20 +87,20 @@ export default function DashboardPage() {
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold font-outfit text-slate-900 mb-2">
-            Welcome back, {user?.full_name || "Creator"}!
+            Welcome back, {user?.full_name || "Café Owner"}!
           </h1>
-          <p className="text-lg text-slate-600">Let's create something amazing today</p>
+          <p className="text-lg text-slate-600">Let's create amazing content for your café today</p>
         </div>
 
         <div data-testid="dashboard-bento-grid" className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-8">
           <div className="col-span-full md:col-span-4 lg:col-span-4 row-span-2 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-8 shadow-xl shadow-indigo-500/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
             <div className="relative z-10">
-              <div className="inline-block w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-6">
+              <div className="inline-flex w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm items-center justify-center mb-6">
                 <Plus className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-3xl font-bold font-outfit text-white mb-2">Ready to Create?</h2>
-              <p className="text-white/90 mb-8 text-lg">Start a new project and bring your ideas to life with AI</p>
+              <p className="text-white/90 mb-8 text-lg">Start a new marketing campaign and bring your café ideas to life with AI</p>
               <Button
                 data-testid="dashboard-create-btn"
                 onClick={() => navigate("/create")}
@@ -92,19 +113,19 @@ export default function DashboardPage() {
           </div>
 
           <div className="col-span-1 md:col-span-2 lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-            <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Brands</div>
+            <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Cafés</div>
             <div className="text-4xl font-bold font-outfit text-slate-900 mb-1">{stats.brands}</div>
-            <div className="text-sm text-slate-600">Active brands</div>
+            <div className="text-sm text-slate-600">Active café profiles</div>
           </div>
 
           <div className="col-span-1 md:col-span-2 lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-            <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Projects</div>
+            <div className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Campaigns</div>
             <div className="text-4xl font-bold font-outfit text-slate-900 mb-1">{stats.projects}</div>
-            <div className="text-sm text-slate-600">Total projects</div>
+            <div className="text-sm text-slate-600">Total campaigns</div>
           </div>
 
           <div className="col-span-full md:col-span-3 lg:col-span-3 row-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="text-xl font-semibold font-outfit text-slate-900 mb-4">Recent Projects</h3>
+            <h3 className="text-xl font-semibold font-outfit text-slate-900 mb-4">Recent Campaigns</h3>
             <div className="space-y-3">
               {projects.slice(0, 5).map((project) => (
                 <div
@@ -117,6 +138,7 @@ export default function DashboardPage() {
                     {project.type === "image" && <Image className="w-5 h-5 text-indigo-600" />}
                     {project.type === "video" && <Video className="w-5 h-5 text-indigo-600" />}
                     {project.type === "caption" && <FileText className="w-5 h-5 text-indigo-600" />}
+                    {!["image", "video", "caption"].includes(project.type) && <FileText className="w-5 h-5 text-indigo-600" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
@@ -128,7 +150,7 @@ export default function DashboardPage() {
               ))}
               {projects.length === 0 && (
                 <div className="text-center py-8 text-slate-500">
-                  <p>No projects yet. Create your first one!</p>
+                  <p>No campaigns yet. Create your first one!</p>
                 </div>
               )}
             </div>
@@ -143,7 +165,7 @@ export default function DashboardPage() {
 
         {brands.length > 0 && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="text-xl font-semibold font-outfit text-slate-900 mb-4">Your Brand</h3>
+            <h3 className="text-xl font-semibold font-outfit text-slate-900 mb-4">Your Café</h3>
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
                 <span className="text-2xl font-bold text-indigo-600">
@@ -153,15 +175,16 @@ export default function DashboardPage() {
               <div className="flex-1">
                 <h4 className="font-semibold text-lg text-slate-900">{brands[0].name}</h4>
                 <p className="text-sm text-slate-600 capitalize">
-                  {brands[0].tone || "Professional"} • {brands[0].industry || "General"}
+                  {brands[0].tone || "Professional"} • {brands[0].industry || "Café"}
                 </p>
               </div>
               <Button
+                data-testid="edit-brand-btn"
                 onClick={() => navigate("/brand")}
                 variant="outline"
                 className="rounded-lg"
               >
-                Edit Brand
+                Edit Café
               </Button>
             </div>
           </div>

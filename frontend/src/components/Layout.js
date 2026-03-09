@@ -1,16 +1,16 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Bot, LayoutDashboard, FolderKanban, Sparkles, Image, Layout as LayoutIcon, History, Settings, LogOut, TrendingUp } from "lucide-react";
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const token = localStorage.getItem("token");
+  const { isAuthenticated, logout, user } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    logout();
+    navigate("/", { replace: true });
   };
 
   const navItems = [
@@ -23,10 +23,11 @@ export default function Layout({ children }) {
     { path: "/templates", icon: LayoutIcon, label: "Templates", testid: "nav-templates" },
     { path: "/calendar", icon: History, label: "Calendar", testid: "nav-calendar" },
     { path: "/history", icon: History, label: "History", testid: "nav-history" },
-    { path: "/brand", icon: Settings, label: "Caf\u00e9 Settings", testid: "nav-brand-settings" }
+    { path: "/brand", icon: Settings, label: "Café Settings", testid: "nav-brand-settings" }
   ];
 
-  if (!token) {
+  // If not authenticated, just render children (for public pages)
+  if (!isAuthenticated) {
     return <>{children}</>;
   }
 
@@ -36,19 +37,22 @@ export default function Layout({ children }) {
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-slate-200">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer" 
+            onClick={() => navigate("/dashboard")}
+          >
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center">
               <Bot className="w-6 h-6 text-white" />
             </div>
             <div>
               <span className="font-outfit text-xl font-bold text-slate-900">FrameFlow</span>
-              <p className="text-xs text-slate-500">AI Creative Studio</p>
+              <p className="text-xs text-slate-500">Café Marketing Studio</p>
             </div>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
@@ -77,11 +81,17 @@ export default function Layout({ children }) {
             </div>
             <span className="font-semibold text-slate-900 text-sm">Framey</span>
           </div>
-          <p className="text-xs text-slate-600 mb-3">Your AI creative assistant is ready to help!</p>
+          <p className="text-xs text-slate-600 mb-3">Your AI café marketing assistant is ready to help!</p>
         </div>
 
-        {/* Logout */}
+        {/* User Info & Logout */}
         <div className="p-4 border-t border-slate-200">
+          {user && (
+            <div className="mb-3 px-2">
+              <p className="text-sm font-medium text-slate-900 truncate">{user.full_name || user.email}</p>
+              <p className="text-xs text-slate-500 truncate">{user.email}</p>
+            </div>
+          )}
           <Button
             data-testid="sidebar-logout-btn"
             onClick={handleLogout}

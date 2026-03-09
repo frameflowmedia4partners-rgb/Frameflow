@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bot, Check, Coffee } from "lucide-react";
+import { Check, Coffee, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { brandAPI, authAPI } from "@/services/api";
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(1);
@@ -17,32 +16,28 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const token = localStorage.getItem("token");
-
   const handleCreateCafe = async () => {
+    if (!cafeName.trim()) {
+      toast.error("Please enter your café name");
+      return;
+    }
+
     setLoading(true);
     try {
-      await axios.post(
-        `${API}/brands`,
-        { 
-          name: cafeName, 
-          tone, 
-          industry,
-          specialties: specialties || "Coffee, Pastries, Ambiance"
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await brandAPI.create({ 
+        name: cafeName, 
+        tone, 
+        industry,
+        specialties: specialties || "Coffee, Pastries, Ambiance"
+      });
       
-      await axios.put(
-        `${API}/auth/complete-onboarding`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await authAPI.completeOnboarding();
 
       toast.success("Café profile created!");
       navigate("/dashboard", { replace: true });
     } catch (error) {
-      toast.error("Failed to create café profile");
+      console.error("Failed to create café:", error);
+      toast.error("Failed to create café profile. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -60,7 +55,7 @@ export default function OnboardingPage() {
 
       <div className="relative z-10 w-full max-w-2xl">
         <div className="text-center mb-8">
-          <div className="inline-block w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center mb-4 shadow-xl shadow-indigo-500/20 animate-bounce-slow">
+          <div className="inline-flex w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 items-center justify-center mb-4 shadow-xl shadow-indigo-500/20 animate-bounce-slow">
             <Coffee className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold font-outfit text-slate-900 mb-2">
@@ -122,7 +117,7 @@ export default function OnboardingPage() {
               <Button
                 data-testid="onboarding-next-btn"
                 onClick={() => setStep(2)}
-                disabled={!cafeName}
+                disabled={!cafeName.trim()}
                 className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
               >
                 Continue
@@ -189,7 +184,14 @@ export default function OnboardingPage() {
                 disabled={loading}
                 className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
               >
-                {loading ? "Creating..." : "Go to Dashboard"}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Go to Dashboard"
+                )}
               </Button>
             </div>
           )}

@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
+import { useAuth } from "@/context/AuthContext";
+import { authAPI } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Bot } from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AuthPage() {
@@ -15,50 +15,46 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Check if already logged in
-    const token = localStorage.getItem("token");
-    if (token) {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [navigate]);
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const endpoint = isLogin ? "/auth/login" : "/auth/signup";
-      const payload = isLogin
-        ? { email, password }
-        : { email, password, full_name: fullName };
-
-      const response = await axios.post(`${API}${endpoint}`, payload);
+      let response;
       
-      // Store authentication data
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+      if (isLogin) {
+        response = await authAPI.login(email, password);
+      } else {
+        response = await authAPI.signup(email, password, fullName);
+      }
+      
+      // Use AuthContext to store authentication data
+      login(response.data.token, response.data.user);
 
       toast.success(isLogin ? "Welcome back!" : "Account created!");
       
       // Navigate based on onboarding status
       if (isLogin) {
         // Check if user has completed onboarding
-        const userRes = await axios.get(`${API}/auth/me`, {
-          headers: { Authorization: `Bearer ${response.data.token}` }
-        });
-        
-        if (userRes.data.onboarding_completed) {
+        try {
+          const userRes = await authAPI.me();
+          if (userRes.data.onboarding_completed) {
+            navigate("/dashboard", { replace: true });
+          } else {
+            navigate("/onboarding", { replace: true });
+          }
+        } catch {
+          // If we can't check onboarding status, go to dashboard
           navigate("/dashboard", { replace: true });
-        } else {
-          navigate("/onboarding", { replace: true });
         }
       } else {
         navigate("/onboarding", { replace: true });
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Authentication failed");
+      const errorMessage = error.response?.data?.detail || "Authentication failed";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -70,7 +66,7 @@ export default function AuthPage() {
 
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-block w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center mb-4 shadow-xl shadow-indigo-500/20 animate-bounce-slow">
+          <div className="inline-flex w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 items-center justify-center mb-4 shadow-xl shadow-indigo-500/20 animate-bounce-slow">
             <Bot className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold font-outfit text-slate-900 mb-2">
@@ -94,9 +90,10 @@ export default function AuthPage() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  required
+                  required={!isLogin}
                   className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
                   placeholder="Urban Brew Café"
+                  disabled={loading}
                 />
               </div>
             )}
@@ -114,6 +111,7 @@ export default function AuthPage() {
                 required
                 className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
                 placeholder="you@example.com"
+                disabled={loading}
               />
             </div>
 
@@ -128,8 +126,10 @@ export default function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
                 className="rounded-xl border-slate-200 bg-slate-50/50 px-4 py-3 text-base"
                 placeholder="••••••••"
+                disabled={loading}
               />
             </div>
 
@@ -139,7 +139,14 @@ export default function AuthPage() {
               disabled={loading}
               className="w-full rounded-full px-8 py-6 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all duration-200"
             >
-              {loading ? "Loading..." : isLogin ? "Sign In" : "Create Café Account"}
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  {isLogin ? "Signing in..." : "Creating account..."}
+                </>
+              ) : (
+                isLogin ? "Sign In" : "Create Café Account"
+              )}
             </Button>
           </form>
 
@@ -147,7 +154,8 @@ export default function AuthPage() {
             <button
               data-testid="auth-toggle-btn"
               onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+              disabled={loading}
+              className="text-sm text-slate-600 hover:text-indigo-600 transition-colors disabled:opacity-50"
             >
               {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </button>

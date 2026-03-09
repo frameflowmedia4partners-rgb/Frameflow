@@ -1,19 +1,19 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
-import { API } from "@/App";
 import Layout from "@/components/Layout";
+import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Bot, Image, Video, FileText } from "lucide-react";
+import { Bot, Image, Video, FileText, AlertCircle, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { projectAPI, contentAPI } from "@/services/api";
 
 export default function ProjectPage() {
   const { id } = useParams();
   const [project, setProject] = useState(null);
   const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
 
   useEffect(() => {
     loadProject();
@@ -21,15 +21,20 @@ export default function ProjectPage() {
 
   const loadProject = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const [projectRes, contentsRes] = await Promise.all([
-        axios.get(`${API}/projects/${id}`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/contents/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+        projectAPI.get(id),
+        contentAPI.getByProject(id).catch(() => ({ data: [] }))
       ]);
+      
       setProject(projectRes.data);
       setContents(contentsRes.data);
     } catch (error) {
-      toast.error("Failed to load project");
-      navigate("/dashboard");
+      console.error("Failed to load project:", error);
+      setError("Failed to load campaign");
+      toast.error("Failed to load campaign");
     } finally {
       setLoading(false);
     }
@@ -38,9 +43,28 @@ export default function ProjectPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-bounce-slow">
-            <Bot className="w-12 h-12 text-indigo-600" />
+        <LoadingSpinner message="Loading campaign..." />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load Campaign</h2>
+          <p className="text-slate-600 mb-4">{error}</p>
+          <div className="flex gap-3">
+            <Button onClick={() => navigate("/projects")} variant="outline" className="rounded-full px-6">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Campaigns
+            </Button>
+            <Button onClick={loadProject} className="rounded-full px-6">
+              Try Again
+            </Button>
           </div>
         </div>
       </Layout>
@@ -51,8 +75,16 @@ export default function ProjectPage() {
     <Layout>
       <div className="p-8">
         <div className="mb-8">
+          <Button
+            onClick={() => navigate("/projects")}
+            variant="ghost"
+            className="mb-4 -ml-2"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Campaigns
+          </Button>
           <h1 className="text-4xl font-bold font-outfit text-slate-900 mb-2">{project?.name}</h1>
-          <p className="text-lg text-slate-600 capitalize">{project?.type} Project</p>
+          <p className="text-lg text-slate-600 capitalize">{project?.type} Campaign</p>
         </div>
 
         <div>
@@ -70,6 +102,7 @@ export default function ProjectPage() {
                       {content.type === "image" && <Image className="w-5 h-5 text-indigo-600" />}
                       {content.type === "video" && <Video className="w-5 h-5 text-indigo-600" />}
                       {content.type === "caption" && <FileText className="w-5 h-5 text-indigo-600" />}
+                      {!["image", "video", "caption"].includes(content.type) && <FileText className="w-5 h-5 text-indigo-600" />}
                     </div>
                     <span className="font-semibold text-slate-900 capitalize">{content.type}</span>
                   </div>
@@ -77,14 +110,16 @@ export default function ProjectPage() {
                   {content.type === "caption" && (
                     <p className="text-slate-600 text-sm line-clamp-4">{content.content_text}</p>
                   )}
-                  {content.type === "image" && (
+                  {content.type === "image" && content.content_url && (
                     <img src={content.content_url} alt="Generated" className="w-full rounded-lg" />
                   )}
-                  {content.type === "video" && (
+                  {content.type === "video" && content.content_url && (
                     <video src={content.content_url} controls className="w-full rounded-lg" />
                   )}
 
-                  <p className="text-xs text-slate-400 mt-4">{content.prompt}</p>
+                  {content.prompt && (
+                    <p className="text-xs text-slate-400 mt-4 line-clamp-2">{content.prompt}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -94,7 +129,13 @@ export default function ProjectPage() {
                 <Bot className="w-12 h-12 text-indigo-600" />
               </div>
               <h2 className="text-2xl font-semibold font-outfit text-slate-900 mb-2">No content yet</h2>
-              <p className="text-slate-600">Generate content for this project to see it here</p>
+              <p className="text-slate-600 mb-6">Generate content for this campaign to see it here</p>
+              <Button
+                onClick={() => navigate("/create")}
+                className="rounded-full px-8 py-3 bg-indigo-600 text-white font-semibold"
+              >
+                Create Content
+              </Button>
             </div>
           )}
         </div>
