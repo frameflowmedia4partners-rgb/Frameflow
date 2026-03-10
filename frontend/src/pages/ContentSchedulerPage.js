@@ -171,7 +171,7 @@ export default function ContentSchedulerPage() {
 
     setCreating(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("frameflow_token");
       const scheduledAt = new Date(selectedDate);
       const [hours, minutes] = newPost.scheduled_time.split(':');
       scheduledAt.setHours(parseInt(hours), parseInt(minutes), 0, 0);

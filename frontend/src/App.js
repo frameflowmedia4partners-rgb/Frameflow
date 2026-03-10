@@ -12,8 +12,12 @@ import OnboardingPage from "@/pages/OnboardingPage";
 import DashboardPage from "@/pages/DashboardPage";
 import IdeasPage from "@/pages/IdeasPage";
 import CreateContentPage from "@/pages/CreateContentPage";
+import CreatePostPage from "@/pages/CreatePostPage";
+import CreateReelPage from "@/pages/CreateReelPage";
+import ContentLibraryPage from "@/pages/ContentLibraryPage";
 import MediaLibraryPage from "@/pages/MediaLibraryPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import CampaignsPage from "@/pages/CampaignsPage";
 import TemplatesPage from "@/pages/TemplatesPage";
 import BrandProfilePage from "@/pages/BrandProfilePage";
 import MarketingDashboard from "@/pages/MarketingDashboard";
@@ -199,6 +203,22 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/create-post"
+        element={
+          <ClientRoute>
+            <CreatePostPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/create-reel"
+        element={
+          <ClientRoute>
+            <CreateReelPage />
+          </ClientRoute>
+        }
+      />
+      <Route
         path="/content"
         element={
           <ClientRoute>
@@ -223,6 +243,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/library"
+        element={
+          <ClientRoute>
+            <ContentLibraryPage />
+          </ClientRoute>
+        }
+      />
+      <Route
         path="/projects"
         element={
           <ClientRoute>
@@ -234,7 +262,7 @@ function AppRoutes() {
         path="/campaigns"
         element={
           <ClientRoute>
-            <MarketingDashboard />
+            <CampaignsPage />
           </ClientRoute>
         }
       />

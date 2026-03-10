@@ -132,9 +132,10 @@ class CampaignCreateRequest(BaseModel):
     name: str
     objective: str
     daily_budget: float
-    start_date: str
-    end_date: str
-    platforms: List[str]
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    platforms: Optional[List[str]] = ["instagram"]
+    status: Optional[str] = "draft"
     content_id: Optional[str] = None
     audience: Optional[Dict] = None
 
@@ -1321,29 +1322,14 @@ Extract and return as JSON:
         ]
     }, {"_id": 0}).to_list(10)
     
-    # Generate images if needed
-    if len(media_items) < 6:
-        try:
-            image_gen = OpenAIImageGeneration(api_key=os.environ['EMERGENT_LLM_KEY'])
-            
-            for i in range(6 - len(media_items)):
-                prompt = f"{keyword} professional food/product photography, hyperrealistic, natural lighting, ultra detailed, photographic quality, NOT AI-generated looking, commercial grade photography"
-                
-                images = await image_gen.generate_images(
-                    prompt=prompt,
-                    model="gpt-image-1",
-                    number_of_images=1
-                )
-                
-                if images:
-                    url = f"data:image/png;base64,{base64.b64encode(images[0]).decode('utf-8')}"
-                    media_items.append({
-                        "url": url,
-                        "filename": f"{keyword}_{i}.png",
-                        "source": "ai_generated"
-                    })
-        except Exception as e:
-            logging.error(f"Reel image generation error: {str(e)}")
+    # Generate media suggestions instead of actual images (faster)
+    media_suggestions = []
+    for i in range(6):
+        media_suggestions.append({
+            "description": f"Scene {i+1}: {keyword} shot",
+            "type": "image",
+            "source": "suggestion"
+        })
     
     # Generate full reel concept
     concept_prompt = f"""{brand_context}
@@ -1363,9 +1349,10 @@ Include:
     concept = await chat.send_message(UserMessage(text=concept_prompt))
     
     return {
+        "script": concept,
         "concept": concept,
         "intent": intent,
-        "media": media_items,
+        "media_suggestions": media_suggestions,
         "style": request.style,
         "music_mood": request.music_mood
     }
@@ -1439,6 +1426,19 @@ async def get_saved_ideas(current_user: dict = Depends(get_current_user)):
         {"_id": 0}
     ).sort("created_at", -1).to_list(100)
     return ideas
+
+@api_router.delete("/ideas/{idea_id}")
+async def delete_idea(idea_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a saved idea"""
+    result = await db.idea_bank.delete_one({
+        "id": idea_id,
+        "user_id": current_user["user_id"]
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Idea not found")
+    
+    return {"success": True}
 
 # ==================== SCHEDULER ====================
 
@@ -1559,11 +1559,11 @@ Return JSON:
         "daily_budget": request.daily_budget,
         "start_date": request.start_date,
         "end_date": request.end_date,
-        "platforms": request.platforms,
+        "platforms": request.platforms or ["instagram"],
         "content_id": request.content_id,
         "audience": request.audience or ai_audience,
         "ai_suggestions": ai_audience,
-        "status": "draft",
+        "status": request.status or "draft",
         "spend": 0,
         "results": {},
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -1571,7 +1571,26 @@ Return JSON:
     
     await db.campaigns.insert_one(campaign_doc)
     
+    # Remove _id before returning
+    campaign_doc.pop("_id", None)
+    
     return {"success": True, "campaign": campaign_doc}
+
+@api_router.put("/campaigns/{campaign_id}")
+async def update_campaign(campaign_id: str, request: dict, current_user: dict = Depends(get_current_user)):
+    """Update a campaign"""
+    update_data = {k: v for k, v in request.items() if k in ["name", "objective", "daily_budget", "status", "start_date", "end_date", "platforms"]}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.campaigns.update_one(
+        {"id": campaign_id, "user_id": current_user["user_id"]},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    return {"success": True}
 
 @api_router.put("/campaigns/{campaign_id}/status")
 async def update_campaign_status(campaign_id: str, status: str, current_user: dict = Depends(get_current_user)):

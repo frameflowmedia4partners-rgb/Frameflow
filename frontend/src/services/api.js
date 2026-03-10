@@ -82,8 +82,9 @@ export const templateAPI = {
 // Ideas APIs
 export const ideaAPI = {
   generate: (brandId, ideaType) => api.post("/ideas/generate", { brand_id: brandId, idea_type: ideaType }),
-  save: (data) => api.post("/ideas/save", data),
+  save: (brandId, idea) => api.post("/ideas/save", { brand_id: brandId, ...idea }),
   getAll: (brandId, status) => api.get("/ideas", { params: { brand_id: brandId, status } }),
+  delete: (ideaId) => api.delete(`/ideas/${ideaId}`),
 };
 
 // Stats APIs
@@ -113,6 +114,7 @@ export const campaignAPI = {
   getAll: () => api.get("/campaigns"),
   get: (campaignId) => api.get(`/campaigns/${campaignId}`),
   create: (data) => api.post("/campaigns", data),
+  update: (campaignId, data) => api.put(`/campaigns/${campaignId}`, data),
   updateStatus: (campaignId, status) => api.put(`/campaigns/${campaignId}/status`, null, { params: { status } }),
   delete: (campaignId) => api.delete(`/campaigns/${campaignId}`),
 };
