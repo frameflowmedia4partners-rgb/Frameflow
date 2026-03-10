@@ -1,8 +1,8 @@
 import axios from "axios";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+const TOKEN_KEY = "frameflow_token";
 
-// Create axios instance with base URL
 const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
@@ -10,35 +10,28 @@ const api = axios.create({
   },
 });
 
-// Request interceptor - automatically attach token to all requests
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle auth errors globally
+// Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response) {
-      // Handle 401 Unauthorized - token expired or invalid
-      if (error.response.status === 401) {
-        // Clear local storage and redirect to auth page
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        
-        // Only redirect if not already on auth page
-        if (!window.location.pathname.includes("/auth")) {
-          window.location.href = "/auth";
-        }
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem("frameflow_user");
+      localStorage.removeItem("frameflow_impersonation");
+      if (window.location.pathname !== "/auth") {
+        window.location.href = "/auth";
       }
     }
     return Promise.reject(error);
@@ -48,9 +41,9 @@ api.interceptors.response.use(
 // Auth APIs
 export const authAPI = {
   login: (email, password) => api.post("/auth/login", { email, password }),
-  signup: (email, password, full_name) => api.post("/auth/signup", { email, password, full_name }),
   me: () => api.get("/auth/me"),
-  completeOnboarding: () => api.put("/auth/complete-onboarding"),
+  changePassword: (currentPassword, newPassword) => 
+    api.post("/auth/change-password", { current_password: currentPassword, new_password: newPassword }),
 };
 
 // Brand APIs
@@ -64,20 +57,21 @@ export const brandAPI = {
   updateCurrent: (data) => api.put("/brand", data),
 };
 
-// Project APIs
-export const projectAPI = {
-  getAll: (brandId) => api.get("/projects", { params: brandId ? { brand_id: brandId } : {} }),
-  get: (projectId) => api.get(`/projects/${projectId}`),
-  create: (data) => api.post("/projects", data),
-};
-
 // Content APIs
 export const contentAPI = {
-  getByProject: (projectId) => api.get(`/contents/${projectId}`),
   generateCaption: (data) => api.post("/generate/caption", data),
-  generateImage: (data, timeout = 90000) => api.post("/generate/image", data, { timeout }),
-  generateVideo: (data, timeout = 600000) => api.post("/generate/video", data, { timeout }),
-  edit: (contentId, editPrompt) => api.post(`/contents/${contentId}/edit?edit_prompt=${encodeURIComponent(editPrompt)}`),
+  generateImage: (data) => api.post("/generate/image", data),
+  generateVideo: (data) => api.post("/generate/video", data),
+  getProjectContents: (projectId) => api.get(`/contents/${projectId}`),
+  generatePost: (data) => api.post("/posts/generate", data),
+  generateReel: (data) => api.post("/reels/generate", data),
+};
+
+// Project APIs
+export const projectAPI = {
+  getAll: (brandId) => api.get("/projects", { params: { brand_id: brandId } }),
+  get: (projectId) => api.get(`/projects/${projectId}`),
+  create: (data) => api.post("/projects", data),
 };
 
 // Template APIs
@@ -85,23 +79,11 @@ export const templateAPI = {
   getAll: () => api.get("/templates"),
 };
 
-// Idea APIs
+// Ideas APIs
 export const ideaAPI = {
-  getAll: (brandId, status) => api.get("/ideas", { params: { brand_id: brandId, status } }),
   generate: (brandId, ideaType) => api.post("/ideas/generate", { brand_id: brandId, idea_type: ideaType }),
-  save: (brandId, ideaText, ideaType) => api.post("/ideas/save", { brand_id: brandId, idea_text: ideaText, idea_type: ideaType }),
-};
-
-// Calendar APIs
-export const calendarAPI = {
-  generate: (brandId, days) => api.post("/calendar/generate", { brand_id: brandId, days }),
-};
-
-// Media APIs
-export const mediaAPI = {
-  getAll: (brandId) => api.get("/media", { params: brandId ? { brand_id: brandId } : {} }),
-  upload: (data) => api.post("/media/upload", data),
-  delete: (mediaId) => api.delete(`/media/${mediaId}`),
+  save: (data) => api.post("/ideas/save", data),
+  getAll: (brandId, status) => api.get("/ideas", { params: { brand_id: brandId, status } }),
 };
 
 // Stats APIs
@@ -109,23 +91,61 @@ export const statsAPI = {
   get: () => api.get("/stats"),
 };
 
-// Ads/Campaign APIs
-export const adsAPI = {
-  getCampaigns: () => api.get("/ads/campaigns"),
-  createStrategy: (data) => api.post("/ads/campaign/strategy", data),
-  launchCampaign: (campaignId) => api.post(`/ads/campaign/${campaignId}/launch`),
+// Scheduled Posts APIs
+export const schedulerAPI = {
+  getAll: () => api.get("/scheduled-posts"),
+  create: (data) => api.post("/scheduled-posts", data),
+  update: (postId, data) => api.put(`/scheduled-posts/${postId}`, data),
+  delete: (postId) => api.delete(`/scheduled-posts/${postId}`),
 };
 
-// Demo APIs
-export const demoAPI = {
-  setup: () => api.post("/demo/setup"),
+// Media/Content Library APIs
+export const mediaAPI = {
+  getAll: (params) => api.get("/content-library", { params }),
+  upload: (data) => api.post("/content-library", data, {
+    headers: { "Content-Type": "multipart/form-data" }
+  }),
+  delete: (mediaId) => api.delete(`/content-library/${mediaId}`),
 };
 
-// Platform Content APIs
-export const platformAPI = {
-  generate: (data) => api.post("/generate/platform-content", data),
-  repurpose: (data) => api.post("/generate/repurpose", data),
-  batch: (data) => api.post("/generate/batch", data),
+// Campaign APIs
+export const campaignAPI = {
+  getAll: () => api.get("/campaigns"),
+  get: (campaignId) => api.get(`/campaigns/${campaignId}`),
+  create: (data) => api.post("/campaigns", data),
+  updateStatus: (campaignId, status) => api.put(`/campaigns/${campaignId}/status`, null, { params: { status } }),
+  delete: (campaignId) => api.delete(`/campaigns/${campaignId}`),
+};
+
+// Analytics APIs
+export const analyticsAPI = {
+  get: (days) => api.get("/analytics", { params: { days } }),
+  getBestTimes: () => api.get("/analytics/best-times"),
+};
+
+// Integration APIs
+export const integrationAPI = {
+  getStatus: () => api.get("/integrations/status"),
+  getMetaOAuthUrl: () => api.get("/integrations/meta/oauth-url"),
+  disconnectMeta: () => api.delete("/integrations/meta"),
+};
+
+// Onboarding APIs
+export const onboardingAPI = {
+  brandAssets: (data) => api.post("/onboarding/brand-assets", data),
+  businessInfo: (data) => api.post("/onboarding/business-info", data),
+  complete: () => api.post("/onboarding/complete"),
+};
+
+// Notifications APIs
+export const notificationAPI = {
+  getAll: () => api.get("/notifications"),
+  markRead: (noteId) => api.put(`/notifications/${noteId}/read`),
+};
+
+// Billing APIs
+export const billingAPI = {
+  get: () => api.get("/billing"),
 };
 
 // Admin APIs

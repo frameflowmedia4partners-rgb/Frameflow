@@ -1,28 +1,28 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
+
+const TOKEN_KEY = "frameflow_token";
+const USER_KEY = "frameflow_user";
+const IMPERSONATION_KEY = "frameflow_impersonation";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [impersonation, setImpersonation] = useState(null);
 
-  // Initialize auth state from localStorage on app load
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const storedToken = localStorage.getItem("token");
-        const storedUser = localStorage.getItem("user");
+        const storedToken = localStorage.getItem(TOKEN_KEY);
+        const storedImpersonation = localStorage.getItem(IMPERSONATION_KEY);
 
-        if (storedToken && storedUser) {
-          // Validate token by making a request to /api/auth/me
+        if (storedToken) {
           const API = process.env.REACT_APP_BACKEND_URL;
           const response = await fetch(`${API}/api/auth/me`, {
-            headers: {
-              Authorization: `Bearer ${storedToken}`,
-            },
+            headers: { Authorization: `Bearer ${storedToken}` },
           });
 
           if (response.ok) {
@@ -30,23 +30,21 @@ export function AuthProvider({ children }) {
             setToken(storedToken);
             setUser(userData);
             setIsAuthenticated(true);
+            
+            if (storedImpersonation) {
+              try {
+                setImpersonation(JSON.parse(storedImpersonation));
+              } catch (e) {
+                localStorage.removeItem(IMPERSONATION_KEY);
+              }
+            }
           } else {
-            // Token is invalid or expired - clear storage
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
-            setToken(null);
-            setUser(null);
-            setIsAuthenticated(false);
+            clearAuthData();
           }
         }
       } catch (error) {
         console.error("Auth initialization error:", error);
-        // Clear invalid auth state
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        setToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
+        clearAuthData();
       } finally {
         setIsLoading(false);
       }
@@ -55,25 +53,43 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  const clearAuthData = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(IMPERSONATION_KEY);
+    setToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+    setImpersonation(null);
+  };
+
   const login = useCallback((authToken, userData) => {
-    localStorage.setItem("token", authToken);
-    localStorage.setItem("user", JSON.stringify(userData));
+    localStorage.setItem(TOKEN_KEY, authToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(userData));
     setToken(authToken);
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
+    clearAuthData();
   }, []);
 
   const updateUser = useCallback((userData) => {
-    localStorage.setItem("user", JSON.stringify(userData));
-    setUser(userData);
+    localStorage.setItem(USER_KEY, JSON.stringify(userData));
+    setUser(prev => ({ ...prev, ...userData }));
+  }, []);
+
+  const startImpersonation = useCallback((clientInfo, impersonationToken) => {
+    localStorage.setItem(TOKEN_KEY, impersonationToken);
+    localStorage.setItem(IMPERSONATION_KEY, JSON.stringify(clientInfo));
+    setToken(impersonationToken);
+    setImpersonation(clientInfo);
+  }, []);
+
+  const exitImpersonation = useCallback(() => {
+    clearAuthData();
+    window.location.href = "/auth";
   }, []);
 
   const value = {
@@ -81,9 +97,14 @@ export function AuthProvider({ children }) {
     token,
     isLoading,
     isAuthenticated,
+    impersonation,
+    isAdmin: user?.role === "super_admin",
+    isClient: user?.role === "client_user" || (!user?.role && isAuthenticated),
     login,
     logout,
     updateUser,
+    startImpersonation,
+    exitImpersonation,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
