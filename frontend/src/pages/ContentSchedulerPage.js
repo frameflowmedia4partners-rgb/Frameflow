@@ -68,22 +68,46 @@ export default function ContentSchedulerPage() {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("frameflow_token");
       
-      const [brandsRes, mediaRes, postsRes] = await Promise.all([
-        brandAPI.getAll(),
-        mediaAPI.getAll(),
-        fetch(`${API_URL}/api/scheduled-posts`, {
+      let brandsData = [];
+      let mediaData = [];
+      let postsData = [];
+      
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      
+      try {
+        const mediaRes = await mediaAPI.getAll();
+        mediaData = mediaRes.data || [];
+      } catch (e) {
+        console.log("Media fetch failed, using empty state");
+      }
+      
+      try {
+        const postsRes = await fetch(`${API_URL}/api/scheduled-posts`, {
           headers: { Authorization: `Bearer ${token}` }
-        }).then(r => r.ok ? r.json() : [])
-      ]);
+        });
+        if (postsRes.ok) {
+          postsData = await postsRes.json();
+        }
+      } catch (e) {
+        console.log("Scheduled posts fetch failed, using empty state");
+      }
       
-      setBrands(brandsRes.data);
-      setMedia(mediaRes.data || []);
-      setScheduledPosts(Array.isArray(postsRes) ? postsRes : []);
+      setBrands(brandsData);
+      setMedia(mediaData);
+      setScheduledPosts(Array.isArray(postsData) ? postsData : []);
     } catch (error) {
       console.error("Failed to load data:", error);
-      setError("Failed to load scheduler data");
+      // Use empty states instead of error
+      setBrands([]);
+      setMedia([]);
+      setScheduledPosts([]);
     } finally {
       setLoading(false);
     }
@@ -244,18 +268,6 @@ export default function ContentSchedulerPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading content scheduler..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
-          <Button onClick={loadData} className="rounded-full px-6">Try Again</Button>
-        </div>
       </Layout>
     );
   }

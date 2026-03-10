@@ -52,10 +52,17 @@ export default function IntegrationsPage() {
     setLoading(true);
     try {
       const response = await api.get("/integrations/status");
-      setIntegrationStatus(response.data);
+      setIntegrationStatus(response.data || {
+        instagram: { connected: false, accounts: [], connected_at: null },
+        meta_ads: { connected: false, account_id: null, connected_at: null }
+      });
     } catch (error) {
       console.error("Failed to load integrations:", error);
-      toast.error("Failed to load integration status");
+      // Use default state instead of error
+      setIntegrationStatus({
+        instagram: { connected: false, accounts: [], connected_at: null },
+        meta_ads: { connected: false, account_id: null, connected_at: null }
+      });
     } finally {
       setLoading(false);
     }

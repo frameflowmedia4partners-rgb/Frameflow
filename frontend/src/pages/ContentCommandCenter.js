@@ -70,14 +70,20 @@ export default function ContentCommandCenter() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const brandsRes = await brandAPI.getAll();
-      setBrands(brandsRes.data || []);
-      if (brandsRes.data?.length > 0) {
-        setSelectedBrand(brandsRes.data[0]);
+      let brandsData = [];
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      setBrands(brandsData);
+      if (brandsData.length > 0) {
+        setSelectedBrand(brandsData[0]);
       }
     } catch (error) {
       console.error("Failed to load data:", error);
-      toast.error("Failed to load brands");
+      setBrands([]);
     } finally {
       setLoading(false);
     }

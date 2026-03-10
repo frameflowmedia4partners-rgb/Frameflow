@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { MessageCircle, Trash2, ArrowLeft, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
 
 // Frameflow Logo Component
 function FrameflowLogo({ className = "w-10 h-10" }) {
@@ -169,6 +170,7 @@ export default function DataDeletionPage() {
           </div>
         </div>
       </footer>
+      <WhatsAppFloat />
     </div>
   );
 }

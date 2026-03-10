@@ -33,25 +33,58 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("frameflow_token");
       
-      const [brandsRes, projectsRes, statsRes, postsRes] = await Promise.all([
-        brandAPI.getAll(),
-        projectAPI.getAll(),
-        statsAPI.get(),
-        fetch(`${API_URL}/api/scheduled-posts`, {
+      // Fetch data with graceful fallbacks
+      let brandsData = [];
+      let projectsData = [];
+      let statsData = { brands: 0, projects: 0, contents_generated: 0 };
+      let postsData = [];
+      
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      
+      try {
+        const projectsRes = await projectAPI.getAll();
+        projectsData = projectsRes.data || [];
+      } catch (e) {
+        console.log("Projects fetch failed, using empty state");
+      }
+      
+      try {
+        const statsRes = await statsAPI.get();
+        statsData = statsRes.data || { brands: 0, projects: 0, contents_generated: 0 };
+      } catch (e) {
+        console.log("Stats fetch failed, using empty state");
+      }
+      
+      try {
+        const postsRes = await fetch(`${API_URL}/api/scheduled-posts`, {
           headers: { Authorization: `Bearer ${token}` }
-        }).then(r => r.ok ? r.json() : [])
-      ]);
+        });
+        if (postsRes.ok) {
+          const posts = await postsRes.json();
+          postsData = Array.isArray(posts) ? posts.slice(0, 5) : [];
+        }
+      } catch (e) {
+        console.log("Posts fetch failed, using empty state");
+      }
 
-      setBrands(brandsRes.data);
-      setProjects(projectsRes.data);
-      setStats(statsRes.data);
-      setScheduledPosts(Array.isArray(postsRes) ? postsRes.slice(0, 5) : []);
+      setBrands(brandsData);
+      setProjects(projectsData);
+      setStats(statsData);
+      setScheduledPosts(postsData);
     } catch (error) {
       console.error("Failed to load dashboard:", error);
-      setError("Failed to load dashboard data");
-      toast.error("Failed to load dashboard");
+      // Even on error, show empty states instead of error UI
+      setBrands([]);
+      setProjects([]);
+      setStats({ brands: 0, projects: 0, contents_generated: 0 });
+      setScheduledPosts([]);
     } finally {
       setLoading(false);
     }
@@ -68,23 +101,6 @@ export default function DashboardPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading your café dashboard..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load Dashboard</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadDashboardData} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
       </Layout>
     );
   }

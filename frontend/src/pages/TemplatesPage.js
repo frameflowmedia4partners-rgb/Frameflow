@@ -21,12 +21,17 @@ export default function TemplatesPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await templateAPI.getAll();
-      setTemplates(response.data);
+      let templatesData = [];
+      try {
+        const response = await templateAPI.getAll();
+        templatesData = response.data || [];
+      } catch (e) {
+        console.log("Templates fetch failed, using empty state");
+      }
+      setTemplates(templatesData);
     } catch (error) {
       console.error("Failed to load templates:", error);
-      setError("Failed to load templates. Please try again.");
-      toast.error("Failed to load templates");
+      setTemplates([]);
     } finally {
       setLoading(false);
     }
@@ -55,23 +60,6 @@ export default function TemplatesPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading templates..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load Templates</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadTemplates} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
       </Layout>
     );
   }

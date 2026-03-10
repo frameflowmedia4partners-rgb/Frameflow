@@ -26,16 +26,24 @@ export default function IdeasPage() {
     try {
       setLoading(true);
       setError(null);
-      const brandsRes = await brandAPI.getAll();
-      setBrands(brandsRes.data);
-      if (brandsRes.data.length > 0) {
-        setSelectedBrand(brandsRes.data[0].id);
-        await loadSavedIdeas(brandsRes.data[0].id);
+      
+      let brandsData = [];
+      
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      
+      setBrands(brandsData);
+      if (brandsData.length > 0) {
+        setSelectedBrand(brandsData[0].id);
+        await loadSavedIdeas(brandsData[0].id);
       }
     } catch (error) {
       console.error("Failed to load brands:", error);
-      setError("Failed to load data");
-      toast.error("Failed to load brands");
+      setBrands([]);
     } finally {
       setLoading(false);
     }
@@ -108,23 +116,6 @@ export default function IdeasPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading idea engine..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadData} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
       </Layout>
     );
   }

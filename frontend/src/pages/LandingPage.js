@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
+import WhatsAppFloat from "@/components/WhatsAppFloat";
 import { 
   Bot, Sparkles, Video, Image as ImageIcon, Calendar, TrendingUp, 
   Target, BarChart3, Clock, Users, CheckCircle, ArrowRight, Play, 
@@ -374,7 +375,7 @@ export default function LandingPage() {
               Get Started in Minutes
             </h2>
             <p className="text-lg text-slate-600">
-              From signup to your first campaign — it's that simple.
+              From onboarding to your first campaign — it's that simple.
             </p>
           </div>
           
@@ -532,6 +533,9 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      
+      {/* WhatsApp Float */}
+      <WhatsAppFloat />
     </div>
   );
 }

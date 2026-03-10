@@ -1075,6 +1075,28 @@ async def disconnect_meta(current_user: dict = Depends(get_current_user)):
 
 # ==================== BRAND PROFILE ====================
 
+@api_router.get("/brands")
+async def get_brands(current_user: dict = Depends(get_current_user)):
+    """Get all brands for the current user (or all for admins)"""
+    user_id = current_user["user_id"]
+    
+    # For regular clients, return their own brand
+    brand = await get_brand_for_user(user_id)
+    if brand:
+        brand["id"] = brand.get("id") or str(brand.get("_id", ""))
+        if "_id" in brand:
+            del brand["_id"]
+        return [brand]
+    return []
+
+@api_router.get("/brands/{brand_id}")
+async def get_brand_by_id(brand_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific brand by ID"""
+    brand = await db.brand_profiles.find_one({"$or": [{"id": brand_id}, {"user_id": brand_id}]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+    return brand
+
 @api_router.get("/brand")
 async def get_brand_profile(current_user: dict = Depends(get_current_user)):
     """Get current user's brand profile"""
@@ -1669,20 +1691,106 @@ async def get_best_posting_times(current_user: dict = Depends(get_current_user))
         }
     }
 
+# ==================== PROJECTS ====================
+
+@api_router.get("/projects")
+async def get_projects(current_user: dict = Depends(get_current_user)):
+    """Get projects for current user"""
+    projects = await db.projects.find({"user_id": current_user["user_id"]}, {"_id": 0}).to_list(100)
+    return projects
+
+@api_router.post("/projects")
+async def create_project(request: dict, current_user: dict = Depends(get_current_user)):
+    """Create a new project"""
+    project = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "name": request.get("name", "New Project"),
+        "type": request.get("type", "mixed"),
+        "brand_id": request.get("brand_id"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.projects.insert_one(project)
+    return project
+
+@api_router.get("/projects/{project_id}")
+async def get_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific project"""
+    project = await db.projects.find_one({"id": project_id, "user_id": current_user["user_id"]}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
 # ==================== TEMPLATES ====================
 
 @api_router.get("/templates")
 async def get_templates():
     """Get content templates"""
     return [
-        {"id": "daily-special", "name": "Daily Special", "type": "post", "category": "promotion"},
-        {"id": "new-drink", "name": "New Drink Launch", "type": "post", "category": "launch"},
-        {"id": "latte-art", "name": "Latte Art Reel", "type": "reel", "category": "content"},
-        {"id": "cozy-vibes", "name": "Cozy Atmosphere", "type": "reel", "category": "ambiance"},
-        {"id": "behind-scenes", "name": "Behind the Scenes", "type": "story", "category": "story"},
-        {"id": "weekend-promo", "name": "Weekend Promotion", "type": "post", "category": "promotion"},
-        {"id": "seasonal", "name": "Seasonal Special", "type": "post", "category": "seasonal"},
-        {"id": "morning-ritual", "name": "Morning Coffee", "type": "reel", "category": "lifestyle"}
+        {
+            "id": "daily-special",
+            "name": "Daily Special",
+            "type": "caption",
+            "category": "promotion",
+            "description": "Highlight today's special drink or food item",
+            "prompt": "Create an engaging Instagram caption for today's special: [your special item]. Include emojis, a call-to-action, and relevant hashtags."
+        },
+        {
+            "id": "new-drink",
+            "name": "New Drink Launch",
+            "type": "caption",
+            "category": "launch",
+            "description": "Announce a new menu item with excitement",
+            "prompt": "Write an exciting announcement post for our new drink: [drink name]. Build anticipation and encourage customers to try it!"
+        },
+        {
+            "id": "latte-art",
+            "name": "Latte Art Reel",
+            "type": "caption",
+            "category": "content",
+            "description": "Caption for a mesmerizing latte art video",
+            "prompt": "Write a captivating caption for a latte art creation video. Keep it short, visual, and satisfying."
+        },
+        {
+            "id": "cozy-vibes",
+            "name": "Cozy Atmosphere",
+            "type": "caption",
+            "category": "ambiance",
+            "description": "Showcase your café's welcoming environment",
+            "prompt": "Create a warm, inviting caption about our café's cozy atmosphere. Make people want to come relax with a coffee."
+        },
+        {
+            "id": "behind-scenes",
+            "name": "Behind the Scenes",
+            "type": "caption",
+            "category": "story",
+            "description": "Share your café's authentic story",
+            "prompt": "Write a relatable behind-the-scenes caption showing the daily life of our café team."
+        },
+        {
+            "id": "weekend-promo",
+            "name": "Weekend Promotion",
+            "type": "caption",
+            "category": "promotion",
+            "description": "Drive weekend traffic with special offers",
+            "prompt": "Create an exciting weekend promotion post. Include urgency and a clear call-to-action."
+        },
+        {
+            "id": "seasonal",
+            "name": "Seasonal Special",
+            "type": "caption",
+            "category": "seasonal",
+            "description": "Celebrate the season with themed content",
+            "prompt": "Write a seasonal-themed caption for [current season]. Connect our coffee to seasonal feelings and experiences."
+        },
+        {
+            "id": "morning-ritual",
+            "name": "Morning Coffee",
+            "type": "caption",
+            "category": "lifestyle",
+            "description": "Capture the morning coffee ritual",
+            "prompt": "Create a relatable caption about morning coffee rituals. Appeal to early risers and coffee lovers."
+        }
     ]
 
 # ==================== BILLING (CLIENT VIEW) ====================

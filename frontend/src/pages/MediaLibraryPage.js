@@ -25,20 +25,32 @@ export default function MediaLibraryPage() {
       setLoading(true);
       setError(null);
       
-      const [mediaRes, brandsRes] = await Promise.all([
-        mediaAPI.getAll(),
-        brandAPI.getAll()
-      ]);
+      let mediaData = [];
+      let brandsData = [];
       
-      setMedia(mediaRes.data);
-      setBrands(brandsRes.data);
-      if (brandsRes.data.length > 0) {
-        setSelectedBrand(brandsRes.data[0].id);
+      try {
+        const mediaRes = await mediaAPI.getAll();
+        mediaData = mediaRes.data || [];
+      } catch (e) {
+        console.log("Media fetch failed, using empty state");
+      }
+      
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      
+      setMedia(mediaData);
+      setBrands(brandsData);
+      if (brandsData.length > 0) {
+        setSelectedBrand(brandsData[0].id);
       }
     } catch (error) {
       console.error("Failed to load media:", error);
-      setError("Failed to load media library");
-      toast.error("Failed to load media");
+      setMedia([]);
+      setBrands([]);
     } finally {
       setLoading(false);
     }
@@ -101,23 +113,6 @@ export default function MediaLibraryPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading media library..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadData} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
       </Layout>
     );
   }

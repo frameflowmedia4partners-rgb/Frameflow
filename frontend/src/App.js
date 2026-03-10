@@ -10,7 +10,7 @@ import LandingPage from "@/pages/LandingPage";
 import AuthPage from "@/pages/AuthPage";
 import OnboardingPage from "@/pages/OnboardingPage";
 import DashboardPage from "@/pages/DashboardPage";
-import IdeaEnginePage from "@/pages/IdeaEnginePage";
+import IdeasPage from "@/pages/IdeasPage";
 import CreateContentPage from "@/pages/CreateContentPage";
 import MediaLibraryPage from "@/pages/MediaLibraryPage";
 import ProjectsPage from "@/pages/ProjectsPage";
@@ -186,7 +186,7 @@ function AppRoutes() {
         path="/ideas"
         element={
           <ClientRoute>
-            <IdeaEnginePage />
+            <IdeasPage />
           </ClientRoute>
         }
       />

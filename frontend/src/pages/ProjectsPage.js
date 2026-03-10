@@ -29,21 +29,33 @@ export default function ProjectsPage() {
       setLoading(true);
       setError(null);
       
-      const [projectsRes, brandsRes] = await Promise.all([
-        projectAPI.getAll(),
-        brandAPI.getAll()
-      ]);
+      let projectsData = [];
+      let brandsData = [];
       
-      setProjects(projectsRes.data);
-      setBrands(brandsRes.data);
+      try {
+        const projectsRes = await projectAPI.getAll();
+        projectsData = projectsRes.data || [];
+      } catch (e) {
+        console.log("Projects fetch failed, using empty state");
+      }
       
-      if (brandsRes.data.length > 0) {
-        setNewProject(prev => ({ ...prev, brand_id: brandsRes.data[0].id }));
+      try {
+        const brandsRes = await brandAPI.getAll();
+        brandsData = brandsRes.data || [];
+      } catch (e) {
+        console.log("Brands fetch failed, using empty state");
+      }
+      
+      setProjects(projectsData);
+      setBrands(brandsData);
+      
+      if (brandsData.length > 0) {
+        setNewProject(prev => ({ ...prev, brand_id: brandsData[0].id }));
       }
     } catch (error) {
       console.error("Failed to load projects:", error);
-      setError("Failed to load projects");
-      toast.error("Failed to load projects");
+      setProjects([]);
+      setBrands([]);
     } finally {
       setLoading(false);
     }
@@ -88,23 +100,6 @@ export default function ProjectsPage() {
     return (
       <Layout>
         <LoadingSpinner message="Loading campaigns..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadData} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
       </Layout>
     );
   }
