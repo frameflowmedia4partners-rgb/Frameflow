@@ -5,64 +5,76 @@ Frameflow is a production-ready SaaS platform that functions as an AI-powered so
 
 ---
 
-## Current Status: MAJOR RESTRUCTURING COMPLETE ✅
+## Current Status: CRITICAL BUGS FIXED ✅ (March 10, 2026)
 
-### Completed in This Session (March 10, 2026)
+### Critical Bug Fixes Completed
 
-#### Section 1: Auth - Login Only ✅
-- [x] Removed ALL signup functionality from codebase
-- [x] Login page with email/password only
-- [x] WhatsApp "Request Demo" button (links to +919330408074)
-- [x] Failed login: "Account not found. Please contact your administrator."
-- [x] JWT auth with 7-day sessions
-- [x] Onboarding redirect for new clients (onboarding_complete flag)
+#### 1. Auth & Session Persistence ✅
+- [x] JWT stored in localStorage with key `frameflow_token`
+- [x] Super admin (`super_admin` role) redirects to `/admin` on login
+- [x] Client user (`client_user` role) redirects to `/dashboard` (or `/onboarding` if not complete)
+- [x] Page refresh maintains session - no logout on refresh
+- [x] Role-based route protection implemented
 
-#### Section 2: Roles & Admin Panel ✅
-- [x] Two roles: super_admin | client_user
-- [x] Two super admin accounts in MongoDB:
-  - adreej@frameflow.me / iamadreejandaarjavbanerjee6969
-  - deepesh@frameflow.me / deepesh@2005
-- [x] Admin Panel at /admin route with:
-  - Client Management table (Name, Email, Plan Start, Payment, Last Login, Status, Actions)
-  - Add New Client modal
-  - Edit client functionality
-  - Reset password (generates one-time temp password with copy button)
-  - Delete client with confirmation
-  - "View Dashboard" impersonation mode
-- [x] Billing Tracker (₹15,000 monthly retainer per client)
-  - Payment status: Paid ✅ | Unpaid ⏳ | Overdue 🔴
-  - Summary cards: Total Revenue, Paid this month, Unpaid, Overdue
-- [x] Admin Stats view
-- [x] Super admins auto-redirect to /admin on login
+#### 2. "Failed to Load" Crashes FIXED ✅
+- [x] Dashboard handles null/missing brand data gracefully
+- [x] Analytics shows demo data when Meta not connected
+- [x] Scheduler handles empty scheduled posts
+- [x] Content Library handles empty media
+- [x] Campaigns page handles empty campaigns
+- [x] Settings page handles null data
+- [x] All pages show meaningful empty states instead of errors
 
-#### Section 3: Onboarding Wizard ✅
-- [x] 4-step wizard with progress bar:
-  1. Brand Assets (logo + sample posts → AI vision analysis)
-  2. Business Info + Website Scraping
-  3. Connect Meta (OAuth flow)
-  4. Confirmation summary
-- [x] Brand DNA extraction from uploaded images
-- [x] Website scraping for images and content
-- [x] onboarding_complete flag management
+#### 3. Signup Removal ✅
+- [x] Auth page is login-only
+- [x] No signup/register buttons anywhere
+- [x] WhatsApp "Request Demo" button for new users
 
-#### Section 13: WhatsApp Integration ✅
-- [x] Login page: "Request a Demo" WhatsApp button
-- [x] Dashboard navbar: WhatsApp support icon
+#### 4. WhatsApp Integration ✅
 - [x] Floating WhatsApp button on ALL pages (bottom-right, green)
-- [x] All links to: wa.me/919330408074
+- [x] Links to: wa.me/919330408074
+- [x] Present on: Dashboard, all client pages, Landing, Privacy Policy, Data Deletion
 
-#### Section 14: Global Rules Applied ✅
-- [x] All currency in ₹ INR (₹15,000 monthly fee)
-- [x] MongoDB collections: users, brand_profiles, content_library, scheduled_posts, idea_bank, billing_records, admin_notes, scraped_media, campaigns
-- [x] Super admin credentials in .env
-- [x] Meta OAuth uses platform-level credentials
-- [x] Frameflow logo + name in navbar/footer
+#### 5. Public Pages ✅
+- [x] /privacy-policy - Accessible without login
+- [x] /data-deletion - Accessible without login
+- [x] Both have WhatsApp float button
 
-#### Section 15: Privacy Policy & Data Deletion ✅
-- [x] /privacy-policy - Public page (no login required)
-- [x] /data-deletion - Public page with WhatsApp contact
-- [x] Meta Platform Policy compliance
-- [x] Links in footer on all pages
+---
+
+## Working Features
+
+### Authentication & Routing
+- Login-only authentication (no signup)
+- Role-based routing (super_admin → /admin, client_user → /dashboard)
+- Session persistence with JWT in localStorage
+- Onboarding redirect for new clients
+
+### Admin Panel (/admin)
+- Client management (list, create, edit, delete)
+- View Dashboard (impersonation)
+- Billing tracker (₹15,000/month per client)
+- Payment status: Paid ✅ | Unpaid ⏳ | Overdue 🔴
+- Admin stats dashboard
+
+### Client Dashboard
+- Quick actions (Content Studio, Schedule, Run Ads, Upload)
+- Campaigns overview
+- Content created stats
+- Upcoming posts
+
+### Content Creation
+- Caption generation with AI
+- Image generation
+- Templates library
+- Idea engine
+
+### Other Client Features
+- Content Library (media management)
+- Scheduler (calendar view)
+- Analytics (demo data when Meta not connected)
+- Campaigns management
+- Settings (Brand DNA, Meta Connection, Password, Billing)
 
 ---
 
@@ -79,15 +91,10 @@ Admin 2:
   Password: deepesh@2005
 ```
 
-### Environment Variables (.env)
+### Test Client Account
 ```
-ADMIN1_EMAIL=adreej@frameflow.me
-ADMIN1_PASS=iamadreejandaarjavbanerjee6969
-ADMIN2_EMAIL=deepesh@frameflow.me
-ADMIN2_PASS=deepesh@2005
-META_APP_ID=[to be added]
-META_APP_SECRET=[to be added]
-META_REDIRECT_URI=[to be added]
+Email: test_client@example.com
+Password: testpass123
 ```
 
 ---
@@ -110,155 +117,61 @@ META_REDIRECT_URI=[to be added]
 - `GET /api/admin/stats` - Platform statistics
 - `GET /api/admin/billing` - Billing overview
 - `PUT /api/admin/billing/{id}` - Mark as paid/unpaid
-- `POST /api/admin/notes` - Send note to client
-- `GET /api/admin/notes/{id}` - Get notes for client
 
-### Onboarding
-- `POST /api/onboarding/brand-assets` - Step 1: Upload & analyze
-- `POST /api/onboarding/business-info` - Step 2: Save info & scrape
-- `POST /api/onboarding/complete` - Mark onboarding done
-
-### Content Generation
-- `POST /api/posts/generate` - Generate branded post
-- `POST /api/reels/generate` - Generate reel concept
-- `POST /api/ideas/generate` - Generate marketing idea
-- `POST /api/ideas/save` - Save to idea bank
-- `GET /api/ideas` - Get saved ideas
-
-### Scheduler
+### Client APIs
+- `GET /api/brands` - Get user's brands
+- `GET /api/brand` - Get current brand profile
+- `PUT /api/brand` - Update brand profile
+- `GET /api/projects` - Get projects
+- `POST /api/projects` - Create project
+- `GET /api/templates` - Get content templates
 - `GET /api/scheduled-posts` - List scheduled posts
-- `POST /api/scheduled-posts` - Create scheduled post
-- `PUT /api/scheduled-posts/{id}` - Update post
-- `DELETE /api/scheduled-posts/{id}` - Delete post
-
-### Campaigns
 - `GET /api/campaigns` - List campaigns
-- `POST /api/campaigns` - Create campaign
-- `PUT /api/campaigns/{id}/status` - Update status
-- `DELETE /api/campaigns/{id}` - Delete campaign
-
-### Analytics
-- `GET /api/analytics` - Get analytics (live or demo)
-- `GET /api/analytics/best-times` - Best posting times
-
-### Integrations
-- `GET /api/integrations/status` - Get Meta connection status
-- `GET /api/integrations/meta/oauth-url` - Start OAuth flow
-- `GET /api/integrations/meta/callback` - OAuth callback
-- `DELETE /api/integrations/meta` - Disconnect Meta
-
-### Content Library
-- `GET /api/content-library` - List media
-- `POST /api/content-library` - Upload media
-- `DELETE /api/content-library/{id}` - Delete media
+- `GET /api/analytics` - Get analytics (demo or real)
+- `GET /api/content-library` - Get media library
+- `POST /api/posts/generate` - Generate post
+- `POST /api/ideas/generate` - Generate idea
 
 ---
 
-## Database Schema
+## Remaining Tasks (P1-P2)
 
-### users
-```
-{
-  id: string,
-  email: string,
-  password_hash: string,
-  full_name: string,
-  role: "super_admin" | "client_user",
-  is_active: boolean,
-  onboarding_complete: boolean,
-  plan_start_date: string,
-  last_login: string,
-  created_at: string
-}
-```
-
-### brand_profiles
-```
-{
-  id: string,
-  user_id: string,
-  name: string,
-  tagline: string,
-  phone: string,
-  address: string,
-  website_url: string,
-  logo_url: string,
-  brand_dna: {
-    logo_position: string,
-    primary_colors: [string],
-    font_style: string,
-    brand_tone: string
-  },
-  facebook_access_token: string (encrypted),
-  instagram_accounts: [object],
-  scraped_data: object
-}
-```
-
-### billing_records
-```
-{
-  id: string,
-  user_id: string,
-  amount: number (15000),
-  due_date: string,
-  status: "paid" | "unpaid",
-  paid_date: string
-}
-```
-
----
-
-## Remaining Tasks
-
-### P1: Post Generation (Section 5)
-- [ ] Media sourcing from content_library → scraped_data → AI generation
+### P1: Post Generation Enhancement
 - [ ] Logo overlay at brand_dna.logo_position
-- [ ] Watermark at brand_dna.watermark_position
+- [ ] Watermark support
 - [ ] Contact info overlay
 - [ ] 1080x1080px feed, 1080x1920px stories output
 
-### P2: Reel Generation with FFmpeg (Section 6)
+### P1: Reel Generation with FFmpeg
 - [ ] Video assembly with Ken Burns effect
 - [ ] Text overlays from AI script
 - [ ] Background music (royalty-free)
 - [ ] Brand watermark burned in
 
-### P3: Meta Campaigns (Section 7)
+### P2: Meta Campaigns
 - [ ] Full campaign creation flow
 - [ ] AI Audience Builder
 - [ ] Meta Marketing API integration
 - [ ] Real-time analytics
 
-### P4: Content Library Fixes (Section 8)
-- [ ] Keyword-based filenames
-- [ ] Auto-tagging
-- [ ] Usage tracking
-
-### P5: Scheduler Fixes (Section 9)
-- [ ] Month/week calendar toggle
-- [ ] Drag-and-drop posts
-- [ ] Meta Graph API publishing
-
-### P6: Analytics - Real Data (Section 10)
-- [ ] Pull from Meta Graph API
+### P2: Real Meta Analytics
+- [ ] Pull from Meta Graph API when connected
 - [ ] Organic + Paid metrics
 - [ ] All currency in ₹
-
-### P7: Idea Engine Speed Fix (Section 11)
-- [ ] Switch to streaming API (typewriter effect)
-- [ ] Ideas appear in 2-3 seconds
-
-### P8: Settings Page (Section 12)
-- [ ] Brand DNA tab
-- [ ] Meta Connection tab
-- [ ] Password tab
-- [ ] Billing tab (client view)
 
 ---
 
 ## Test Reports
-- `/app/test_reports/iteration_6.json` - Current session tests (100% pass)
+- `/app/test_reports/iteration_7.json` - Latest (100% pass, 17 tests)
+- `/app/test_reports/iteration_6.json` - Previous session
+
+---
+
+## Technical Stack
+- **Frontend:** React, React Router, TailwindCSS, Shadcn/UI
+- **Backend:** FastAPI (Python)
+- **Database:** MongoDB
+- **Authentication:** JWT with localStorage
 
 ---
 
