@@ -1230,18 +1230,46 @@ Make it authentic and engaging. All prices in ₹ (Indian Rupees)."""
     
     caption = await chat.send_message(UserMessage(text=prompt))
     
-    # Search content library for relevant media
+    # Search content library for relevant media (including scraped images)
     media_url = None
     media_item = await db.content_library.find_one({
         "user_id": current_user["user_id"],
         "$or": [
             {"filename": {"$regex": request.product_name, "$options": "i"}},
-            {"tags": {"$regex": request.product_name, "$options": "i"}}
+            {"tags": {"$regex": request.product_name, "$options": "i"}},
+            {"source": "scraped"}  # Also use scraped images from website
         ]
     })
     
     if media_item:
         media_url = media_item.get("url")
+    
+    # If still no media, try to get any scraped image from content library
+    if not media_url:
+        any_scraped = await db.content_library.find_one({
+            "user_id": current_user["user_id"],
+            "source": "scraped"
+        })
+        if any_scraped:
+            media_url = any_scraped.get("url")
+    
+    # If still no media, try scraping from brand website
+    if not media_url and brand and brand.get("website_url"):
+        try:
+            website_url = brand.get("website_url")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(website_url, timeout=10) as resp:
+                    if resp.status == 200:
+                        html = await resp.text()
+                        soup = BeautifulSoup(html, 'html.parser')
+                        imgs = soup.find_all('img', src=True)
+                        for img in imgs[:5]:
+                            src = img.get('src', '')
+                            if src.startswith('http') and not any(x in src.lower() for x in ['logo', 'icon', 'banner']):
+                                media_url = src
+                                break
+        except Exception as e:
+            logging.error(f"Website scraping error: {str(e)}")
     
     # If no media found, generate AI image
     if not media_url:
@@ -1318,18 +1346,34 @@ Extract and return as JSON:
         "user_id": current_user["user_id"],
         "$or": [
             {"filename": {"$regex": keyword, "$options": "i"}},
-            {"tags": {"$regex": keyword, "$options": "i"}}
+            {"tags": {"$regex": keyword, "$options": "i"}},
+            {"source": "scraped"}
         ]
     }, {"_id": 0}).to_list(10)
     
-    # Generate media suggestions instead of actual images (faster)
+    # If no media, try to get scraped images from website
+    if not media_items:
+        media_items = await db.content_library.find({
+            "user_id": current_user["user_id"],
+            "source": "scraped"
+        }, {"_id": 0}).to_list(6)
+    
+    # Generate media suggestions with actual URLs if available
     media_suggestions = []
     for i in range(6):
-        media_suggestions.append({
-            "description": f"Scene {i+1}: {keyword} shot",
-            "type": "image",
-            "source": "suggestion"
-        })
+        if i < len(media_items) and media_items[i].get("url"):
+            media_suggestions.append({
+                "url": media_items[i].get("url"),
+                "description": f"Scene {i+1}: {media_items[i].get('filename', keyword)}",
+                "type": "image",
+                "source": media_items[i].get("source", "library")
+            })
+        else:
+            media_suggestions.append({
+                "description": f"Scene {i+1}: {keyword} shot",
+                "type": "image",
+                "source": "suggestion"
+            })
     
     # Generate full reel concept
     concept_prompt = f"""{brand_context}
