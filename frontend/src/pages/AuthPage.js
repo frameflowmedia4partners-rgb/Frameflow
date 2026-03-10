@@ -45,16 +45,22 @@ export default function AuthPage() {
 
       toast.success("Welcome back!");
       
-      // Check if user has completed onboarding
+      // Check user role and redirect appropriately
       try {
         const userRes = await authAPI.me();
-        if (userRes.data.onboarding_complete === false) {
+        
+        // Super admins go to admin panel
+        if (userRes.data.role === "super_admin") {
+          navigate("/admin", { replace: true });
+        } else if (userRes.data.onboarding_complete === false) {
+          // Clients without completed onboarding go to wizard
           navigate("/onboarding", { replace: true });
         } else {
+          // Regular clients go to dashboard
           navigate("/dashboard", { replace: true });
         }
       } catch {
-        // If we can't check onboarding status, go to dashboard
+        // If we can't check user data, go to dashboard
         navigate("/dashboard", { replace: true });
       }
     } catch (error) {

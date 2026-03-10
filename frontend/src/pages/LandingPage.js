@@ -10,12 +10,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const WHATSAPP_NUMBER = "+919930408074";
+const WHATSAPP_NUMBER = "919330408074";
 const WHATSAPP_BUY_MESSAGE = "Hi, I would like to purchase Frameflow for my cafe.";
-const WHATSAPP_DEMO_MESSAGE = "Hi, I would like to request a demo of Frameflow for my cafe.";
+const WHATSAPP_DEMO_MESSAGE = "Hi, I'd like to request a demo of Frameflow";
 
 const getWhatsAppLink = (message) => {
-  return `https://wa.me/${WHATSAPP_NUMBER.replace('+', '')}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 };
 
 export default function LandingPage() {

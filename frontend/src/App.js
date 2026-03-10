@@ -227,6 +227,30 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/reels"
+        element={
+          <ProtectedRoute>
+            <ContentCommandCenter />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns"
+        element={
+          <ProtectedRoute>
+            <MarketingDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <BrandProfilePage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Catch-all redirect to landing page */}
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -60,6 +60,8 @@ export const brandAPI = {
   create: (data) => api.post("/brands", data),
   update: (brandId, data) => api.put(`/brands/${brandId}`, data),
   analyze: (brandId, websiteUrl) => api.post(`/brands/${brandId}/analyze`, { website_url: websiteUrl, brand_id: brandId }),
+  getCurrent: () => api.get("/brand"),
+  updateCurrent: (data) => api.put("/brand", data),
 };
 
 // Project APIs
@@ -128,14 +130,19 @@ export const platformAPI = {
 
 // Admin APIs
 export const adminAPI = {
-  getUsers: () => api.get("/admin/users"),
-  getUser: (userId) => api.get(`/admin/users/${userId}`),
-  createUser: (data) => api.post("/admin/users", data),
-  updateUser: (userId, data) => api.put(`/admin/users/${userId}`, data),
-  resetPassword: (userId, newPassword) => api.post(`/admin/users/${userId}/reset-password`, { new_password: newPassword }),
-  deleteUser: (userId) => api.delete(`/admin/users/${userId}`),
+  getClients: () => api.get("/admin/clients"),
+  getClient: (clientId) => api.get(`/admin/clients/${clientId}`),
+  createClient: (data) => api.post("/admin/clients", data),
+  updateClient: (clientId, data) => api.put(`/admin/clients/${clientId}`, data),
+  resetPassword: (clientId) => api.post(`/admin/clients/${clientId}/reset-password`),
+  deleteClient: (clientId) => api.delete(`/admin/clients/${clientId}`),
+  impersonate: (clientId) => api.post(`/admin/clients/${clientId}/impersonate`),
   getStats: () => api.get("/admin/stats"),
-  setup: () => api.post("/admin/setup"),
+  getBilling: () => api.get("/admin/billing"),
+  updateBilling: (clientId, status) => api.put(`/admin/billing/${clientId}`, { status }),
+  getPaymentHistory: (clientId) => api.get(`/admin/billing/${clientId}/history`),
+  sendNote: (clientId, message) => api.post("/admin/notes", { client_id: clientId, message }),
+  getNotes: (clientId) => api.get(`/admin/notes/${clientId}`),
 };
 
 export default api;
