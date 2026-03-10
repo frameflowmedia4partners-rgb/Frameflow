@@ -23,6 +23,8 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import AnalyticsDashboard from "@/pages/AnalyticsDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
 import ContentCommandCenter from "@/pages/ContentCommandCenter";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
+import DataDeletionPage from "@/pages/DataDeletionPage";
 
 // Protected Route component that uses AuthContext
 function ProtectedRoute({ children }) {
@@ -61,6 +63,8 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/data-deletion" element={<DataDeletionPage />} />
       <Route
         path="/auth"
         element={

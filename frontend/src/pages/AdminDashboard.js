@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
@@ -11,186 +10,169 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Users,
-  UserPlus,
-  Shield,
-  Coffee,
-  BarChart3,
-  CheckCircle,
-  XCircle,
+  Plus,
+  Edit,
   Trash2,
+  Eye,
   Key,
-  AlertCircle,
-  Loader2,
+  Copy,
+  Check,
+  X,
   Search,
+  BarChart3,
+  CreditCard,
+  MessageSquare,
+  Loader2,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
-import { adminAPI } from "@/services/api";
+import api from "@/services/api";
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [stats, setStats] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-
-  // Create user dialog
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ email: "", password: "", cafe_name: "" });
-
-  // Reset password dialog
-  const [showResetDialog, setShowResetDialog] = useState(false);
-  const [resetUserId, setResetUserId] = useState(null);
-  const [newPassword, setNewPassword] = useState("");
-  const [resetting, setResetting] = useState(false);
-
-  // Delete confirmation
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteUserId, setDeleteUserId] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  
+  // Dialog states
+  const [showAddClient, setShowAddClient] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [tempPassword, setTempPassword] = useState("");
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  
+  // Form states
+  const [newClient, setNewClient] = useState({
+    business_name: "",
+    email: "",
+    password: "",
+    plan_start_date: new Date().toISOString().split('T')[0]
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // Check if user is admin
-    if (user && user.role !== "admin") {
-      toast.error("Admin access required");
-      navigate("/dashboard");
-      return;
-    }
     loadData();
-  }, [user, navigate]);
+  }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      setError(null);
-      const [usersRes, statsRes] = await Promise.all([
-        adminAPI.getUsers(),
-        adminAPI.getStats(),
+      const [clientsRes, statsRes] = await Promise.all([
+        api.get("/admin/clients"),
+        api.get("/admin/stats")
       ]);
-      setUsers(usersRes.data);
+      setClients(clientsRes.data || []);
       setStats(statsRes.data);
     } catch (error) {
       console.error("Failed to load admin data:", error);
       if (error.response?.status === 403) {
         toast.error("Admin access required");
         navigate("/dashboard");
-      } else {
-        setError("Failed to load admin data");
-        toast.error("Failed to load data");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.password || !newUser.cafe_name) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    if (newUser.password.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-
-    setCreating(true);
+  const handleAddClient = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
     try {
-      await adminAPI.createUser(newUser);
-      toast.success(`Café "${newUser.cafe_name}" created successfully!`);
-      setShowCreateDialog(false);
-      setNewUser({ email: "", password: "", cafe_name: "" });
+      await api.post("/admin/clients", newClient);
+      toast.success("Client created successfully");
+      setShowAddClient(false);
+      setNewClient({ business_name: "", email: "", password: "", plan_start_date: new Date().toISOString().split('T')[0] });
       loadData();
     } catch (error) {
-      console.error("Failed to create user:", error);
-      toast.error(error.response?.data?.detail || "Failed to create user");
+      toast.error(error.response?.data?.detail || "Failed to create client");
     } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleToggleActive = async (userId, currentStatus) => {
-    try {
-      await adminAPI.updateUser(userId, { is_active: !currentStatus });
-      toast.success(currentStatus ? "Account deactivated" : "Account activated");
-      loadData();
-    } catch (error) {
-      console.error("Failed to update user:", error);
-      toast.error("Failed to update account status");
+      setSubmitting(false);
     }
   };
 
   const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-
-    setResetting(true);
+    if (!selectedClient) return;
+    setSubmitting(true);
+    
     try {
-      await adminAPI.resetPassword(resetUserId, newPassword);
+      const response = await api.post(`/admin/clients/${selectedClient.id}/reset-password`);
+      setTempPassword(response.data.temporary_password);
       toast.success("Password reset successfully");
-      setShowResetDialog(false);
-      setResetUserId(null);
-      setNewPassword("");
     } catch (error) {
-      console.error("Failed to reset password:", error);
       toast.error("Failed to reset password");
     } finally {
-      setResetting(false);
+      setSubmitting(false);
     }
   };
 
-  const handleDeleteUser = async () => {
-    setDeleting(true);
+  const handleDeleteClient = async () => {
+    if (!selectedClient) return;
+    setSubmitting(true);
+    
     try {
-      await adminAPI.deleteUser(deleteUserId);
-      toast.success("User deleted successfully");
-      setShowDeleteDialog(false);
-      setDeleteUserId(null);
+      await api.delete(`/admin/clients/${selectedClient.id}`);
+      toast.success("Client deleted successfully");
+      setShowDeleteConfirm(false);
+      setSelectedClient(null);
       loadData();
     } catch (error) {
-      console.error("Failed to delete user:", error);
-      toast.error("Failed to delete user");
+      toast.error("Failed to delete client");
     } finally {
-      setDeleting(false);
+      setSubmitting(false);
     }
   };
 
-  const filteredUsers = users.filter(
-    (u) =>
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleToggleActive = async (client) => {
+    try {
+      await api.put(`/admin/clients/${client.id}`, {
+        is_active: !client.is_active
+      });
+      toast.success(client.is_active ? "Client deactivated" : "Client activated");
+      loadData();
+    } catch (error) {
+      toast.error("Failed to update client");
+    }
+  };
+
+  const handleImpersonate = async (client) => {
+    try {
+      const response = await api.post(`/admin/clients/${client.id}/impersonate`);
+      // Store the impersonation token
+      localStorage.setItem("frameflow_token", response.data.token);
+      localStorage.setItem("impersonating", JSON.stringify({
+        client_name: response.data.client_name,
+        client_email: response.data.client_email
+      }));
+      toast.success(`Viewing ${response.data.client_name}'s dashboard`);
+      window.location.href = "/dashboard";
+    } catch (error) {
+      toast.error("Failed to enter client dashboard");
+    }
+  };
+
+  const copyPassword = () => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopiedPassword(true);
+    setTimeout(() => setCopiedPassword(false), 2000);
+  };
+
+  const filteredClients = clients.filter(client =>
+    client.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
     return (
       <Layout>
-        <LoadingSpinner message="Loading admin dashboard..." />
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-          <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <AlertCircle className="w-8 h-8 text-red-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900 mb-2">Failed to Load</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
-          <Button onClick={loadData} className="rounded-full px-6">
-            Try Again
-          </Button>
-        </div>
+        <LoadingSpinner message="Loading admin panel..." />
       </Layout>
     );
   }
@@ -199,357 +181,317 @@ export default function AdminDashboard() {
     <Layout>
       <div className="p-8">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-start">
+        <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-4xl font-bold font-outfit text-slate-900">Admin Dashboard</h1>
-            </div>
-            <p className="text-lg text-slate-600">Manage café accounts and platform users</p>
+            <h1 className="text-3xl font-bold font-outfit text-slate-900 mb-1">Client Management</h1>
+            <p className="text-slate-600">Manage your Frameflow clients</p>
           </div>
-
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button
-                data-testid="admin-create-user-btn"
-                className="rounded-full px-6 py-3 bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all"
-              >
-                <UserPlus className="w-5 h-5 mr-2" />
-                Create Café Account
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="font-outfit text-2xl">Create New Café Account</DialogTitle>
-                <DialogDescription>
-                  Create a new account for a café. They will receive login credentials.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div>
-                  <Label>Café Name</Label>
-                  <Input
-                    data-testid="new-cafe-name-input"
-                    value={newUser.cafe_name}
-                    onChange={(e) => setNewUser({ ...newUser, cafe_name: e.target.value })}
-                    placeholder="Urban Brew Café"
-                    className="mt-2"
-                    disabled={creating}
-                  />
-                </div>
-                <div>
-                  <Label>Owner Email</Label>
-                  <Input
-                    data-testid="new-user-email-input"
-                    type="email"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                    placeholder="owner@cafe.com"
-                    className="mt-2"
-                    disabled={creating}
-                  />
-                </div>
-                <div>
-                  <Label>Password</Label>
-                  <Input
-                    data-testid="new-user-password-input"
-                    type="password"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    placeholder="••••••••"
-                    className="mt-2"
-                    disabled={creating}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
-                </div>
-                <Button
-                  data-testid="create-user-submit-btn"
-                  onClick={handleCreateUser}
-                  disabled={creating}
-                  className="w-full rounded-full py-6 bg-indigo-600"
-                >
-                  {creating ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-5 h-5 mr-2" />
-                      Create Account
-                    </>
-                  )}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button
+            onClick={() => setShowAddClient(true)}
+            className="rounded-full px-6 bg-indigo-600"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Add New Client
+          </Button>
         </div>
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-indigo-600" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-indigo-600" />
                 </div>
+                <span className="text-sm text-slate-600">Total Clients</span>
               </div>
-              <div className="text-3xl font-bold font-outfit text-slate-900 mb-1">{stats.total_users}</div>
-              <div className="text-sm text-slate-600">Total Cafés</div>
+              <div className="text-2xl font-bold text-slate-900">{stats.total_clients}</div>
             </div>
-
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
                 </div>
+                <span className="text-sm text-slate-600">Active</span>
               </div>
-              <div className="text-3xl font-bold font-outfit text-slate-900 mb-1">{stats.active_users}</div>
-              <div className="text-sm text-slate-600">Active Accounts</div>
+              <div className="text-2xl font-bold text-slate-900">{stats.active_clients}</div>
             </div>
-
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                  <Coffee className="w-6 h-6 text-purple-600" />
+            <div className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                  <BarChart3 className="w-5 h-5 text-purple-600" />
                 </div>
+                <span className="text-sm text-slate-600">Meta Connected</span>
               </div>
-              <div className="text-3xl font-bold font-outfit text-slate-900 mb-1">{stats.total_projects}</div>
-              <div className="text-sm text-slate-600">Total Campaigns</div>
+              <div className="text-2xl font-bold text-slate-900">{stats.meta_connected}</div>
             </div>
-
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-amber-600" />
+            <div className="bg-white rounded-2xl border border-slate-100 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-amber-600" />
                 </div>
+                <span className="text-sm text-slate-600">Total Posts</span>
               </div>
-              <div className="text-3xl font-bold font-outfit text-slate-900 mb-1">{stats.total_contents}</div>
-              <div className="text-sm text-slate-600">Content Generated</div>
+              <div className="text-2xl font-bold text-slate-900">{stats.total_scheduled_posts}</div>
             </div>
           </div>
         )}
 
-        {/* Users Table */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-          <div className="p-6 border-b border-slate-100">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold font-outfit text-slate-900">Café Accounts</h2>
-              <div className="relative">
-                <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <Input
-                  data-testid="search-users-input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search cafés..."
-                  className="pl-10 w-64"
-                />
-              </div>
-            </div>
+        {/* Search */}
+        <div className="mb-6">
+          <div className="relative max-w-md">
+            <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input
+              type="text"
+              placeholder="Search clients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-12 rounded-xl"
+            />
           </div>
+        </div>
 
+        {/* Clients Table */}
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Café Name</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Email</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Status</th>
-                  <th className="text-left py-4 px-6 font-semibold text-slate-700">Created</th>
-                  <th className="text-right py-4 px-6 font-semibold text-slate-700">Actions</th>
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Name</th>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Email</th>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Plan Start</th>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Payment</th>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Last Login</th>
+                  <th className="text-left px-6 py-4 text-sm font-semibold text-slate-700">Status</th>
+                  <th className="text-right px-6 py-4 text-sm font-semibold text-slate-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.length > 0 ? (
-                  filteredUsers.map((u) => (
-                    <tr
-                      key={u.id}
-                      data-testid={`user-row-${u.id}`}
-                      className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
-                    >
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-                            <Coffee className="w-5 h-5 text-indigo-600" />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-900">{u.full_name}</div>
-                            {u.brand && (
-                              <div className="text-xs text-slate-500">{u.brand.industry || "Café"}</div>
-                            )}
-                          </div>
-                        </div>
+                {filteredClients.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                      No clients found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredClients.map((client) => (
+                    <tr key={client.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-900">{client.full_name}</div>
+                        {client.brand?.name && client.brand.name !== client.full_name && (
+                          <div className="text-xs text-slate-500">{client.brand.name}</div>
+                        )}
                       </td>
-                      <td className="py-4 px-6 text-slate-600">{u.email}</td>
-                      <td className="py-4 px-6">
-                        <span
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
-                            u.is_active !== false
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
+                      <td className="px-6 py-4 text-slate-600">{client.email}</td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {client.plan_start_date ? new Date(client.plan_start_date).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-6 py-4">
+                        {client.billing?.status === "paid" ? (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Paid ✅</span>
+                        ) : client.billing?.is_overdue ? (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Overdue 🔴</span>
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Unpaid ⏳</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 text-sm">
+                        {client.last_login ? new Date(client.last_login).toLocaleDateString() : "Never"}
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleActive(client)}
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            client.is_active 
+                              ? "bg-green-100 text-green-700" 
+                              : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          {u.is_active !== false ? (
-                            <>
-                              <CheckCircle className="w-3 h-3" />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="w-3 h-3" />
-                              Inactive
-                            </>
-                          )}
-                        </span>
+                          {client.is_active ? "Active" : "Inactive"}
+                        </button>
                       </td>
-                      <td className="py-4 px-6 text-slate-600">
-                        {new Date(u.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-4 px-6">
+                      <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            data-testid={`toggle-status-btn-${u.id}`}
-                            onClick={() => handleToggleActive(u.id, u.is_active !== false)}
-                            variant="ghost"
-                            size="sm"
-                            className={`rounded-lg ${
-                              u.is_active !== false
-                                ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                                : "text-green-600 hover:text-green-700 hover:bg-green-50"
-                            }`}
+                          <button
+                            onClick={() => handleImpersonate(client)}
+                            className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600"
+                            title="View Dashboard"
                           >
-                            {u.is_active !== false ? (
-                              <>
-                                <XCircle className="w-4 h-4 mr-1" />
-                                Deactivate
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle className="w-4 h-4 mr-1" />
-                                Activate
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            data-testid={`reset-password-btn-${u.id}`}
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => {
-                              setResetUserId(u.id);
-                              setShowResetDialog(true);
+                              setSelectedClient(client);
+                              setTempPassword("");
+                              setShowResetPassword(true);
                             }}
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-lg text-slate-600 hover:text-slate-900"
+                            className="p-2 rounded-lg hover:bg-amber-50 text-amber-600"
+                            title="Reset Password"
                           >
-                            <Key className="w-4 h-4 mr-1" />
-                            Reset
-                          </Button>
-                          <Button
-                            data-testid={`delete-user-btn-${u.id}`}
+                            <Key className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => {
-                              setDeleteUserId(u.id);
-                              setShowDeleteDialog(true);
+                              setSelectedClient(client);
+                              setShowDeleteConfirm(true);
                             }}
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="p-2 rounded-lg hover:bg-red-50 text-red-600"
+                            title="Delete"
                           >
                             <Trash2 className="w-4 h-4" />
-                          </Button>
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-500">
-                      {searchTerm ? "No cafés match your search" : "No café accounts yet"}
-                    </td>
-                  </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+      </div>
 
-        {/* Reset Password Dialog */}
-        <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reset Password</DialogTitle>
-              <DialogDescription>Enter a new password for this user.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div>
-                <Label>New Password</Label>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="mt-2"
-                />
-                <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
-              </div>
-              <Button
-                onClick={handleResetPassword}
-                disabled={resetting}
-                className="w-full rounded-full py-6 bg-indigo-600"
-              >
-                {resetting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Resetting...
-                  </>
-                ) : (
-                  "Reset Password"
-                )}
-              </Button>
+      {/* Add Client Dialog */}
+      <Dialog open={showAddClient} onOpenChange={setShowAddClient}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit text-xl">Add New Client</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddClient} className="space-y-4 pt-4">
+            <div>
+              <Label>Business Name</Label>
+              <Input
+                value={newClient.business_name}
+                onChange={(e) => setNewClient({ ...newClient, business_name: e.target.value })}
+                placeholder="Urban Brew Café"
+                required
+                className="mt-2"
+              />
             </div>
-          </DialogContent>
-        </Dialog>
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={newClient.email}
+                onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                placeholder="owner@cafe.com"
+                required
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={newClient.password}
+                onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
+                placeholder="Set initial password"
+                required
+                minLength={6}
+                className="mt-2"
+              />
+            </div>
+            <div>
+              <Label>Plan Start Date</Label>
+              <Input
+                type="date"
+                value={newClient.plan_start_date}
+                onChange={(e) => setNewClient({ ...newClient, plan_start_date: e.target.value })}
+                className="mt-2"
+              />
+            </div>
+            <Button type="submit" disabled={submitting} className="w-full rounded-xl">
+              {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+              Create Client
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-red-600">Delete Account</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this account? This will permanently remove the user
-                and all their data including brands, campaigns, and content. This action cannot be
-                undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex gap-3 pt-4">
-              <Button
-                onClick={() => setShowDeleteDialog(false)}
-                variant="outline"
-                className="flex-1 rounded-full"
-              >
+      {/* Reset Password Dialog */}
+      <Dialog open={showResetPassword} onOpenChange={setShowResetPassword}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit text-xl">Reset Password</DialogTitle>
+          </DialogHeader>
+          <div className="pt-4">
+            {tempPassword ? (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  Temporary password for <strong>{selectedClient?.email}</strong>:
+                </p>
+                <div className="flex items-center gap-2 p-4 bg-slate-100 rounded-xl">
+                  <code className="flex-1 font-mono text-lg">{tempPassword}</code>
+                  <button
+                    onClick={copyPassword}
+                    className="p-2 rounded-lg hover:bg-slate-200"
+                  >
+                    {copiedPassword ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
+                  </button>
+                </div>
+                <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 inline mr-1" />
+                  This password is shown only once. Make sure to copy it now.
+                </p>
+                <Button onClick={() => setShowResetPassword(false)} className="w-full rounded-xl">
+                  Done
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  Generate a temporary password for <strong>{selectedClient?.full_name}</strong>?
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setShowResetPassword(false)} className="flex-1 rounded-xl">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleResetPassword} disabled={submitting} className="flex-1 rounded-xl">
+                    {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                    Generate Password
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit text-xl text-red-600">Delete Client</DialogTitle>
+          </DialogHeader>
+          <div className="pt-4 space-y-4">
+            <p className="text-slate-600">
+              Are you sure you want to delete <strong>{selectedClient?.full_name}</strong>? 
+              This will permanently remove all their data including:
+            </p>
+            <ul className="text-sm text-slate-500 list-disc list-inside space-y-1">
+              <li>Brand profile and assets</li>
+              <li>Content library</li>
+              <li>Scheduled posts</li>
+              <li>Campaigns</li>
+              <li>Billing records</li>
+            </ul>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl">
                 Cancel
               </Button>
-              <Button
-                onClick={handleDeleteUser}
-                disabled={deleting}
-                className="flex-1 rounded-full bg-red-600 hover:bg-red-700"
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteClient} 
+                disabled={submitting}
+                className="flex-1 rounded-xl"
               >
-                {deleting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-5 h-5 mr-2" />
-                    Delete Account
-                  </>
-                )}
+                {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                Delete Client
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
