@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   Upload,
   Sparkles,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/services/api";

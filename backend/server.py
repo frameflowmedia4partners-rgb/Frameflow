@@ -1264,12 +1264,18 @@ async def generate_content_swipe_posts(request: ContentSwipeRequest, current_use
     if credits_remaining < credits_needed:
         raise HTTPException(status_code=403, detail="Monthly credit limit reached. Contact your account manager.")
     
-    # Generate creatives
+    # Get user preferences for AI learning
+    user_preferences = await db.content_preferences.find(
+        {"user_id": current_user["user_id"]}
+    ).sort("timestamp", -1).limit(50).to_list(50)
+    
+    # Generate creatives with learning
     creatives = await generate_content_swipe(
         brand_dna=brand,
         menu_items=brand.get("menu_items", []),
         count=request.count,
-        language=brand.get("language", "English")
+        language=brand.get("language", "English"),
+        user_preferences=user_preferences
     )
     
     # Deduct credits

@@ -55,7 +55,7 @@ const creationModes = [
     description: "AI-powered product photography for your menu.",
     icon: Camera,
     gradient: "from-rose-400 to-red-500",
-    path: "/photoshoot",
+    path: "/concept",
   },
   {
     id: "reel",

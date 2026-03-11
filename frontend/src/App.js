@@ -16,6 +16,10 @@ import ContentSwipePage from "@/pages/ContentSwipePage";
 import BrandDNAPage from "@/pages/BrandDNAPage";
 import AIChatPage from "@/pages/AIChatPage";
 import ConceptPage from "@/pages/ConceptPage";
+import CloneTemplatePage from "@/pages/CloneTemplatePage";
+import VariationsPage from "@/pages/VariationsPage";
+import PostEditorPage from "@/pages/PostEditorPage";
+import LibraryPage from "@/pages/LibraryPage";
 
 // Legacy Pages (keeping for compatibility)
 import DashboardPage from "@/pages/DashboardPage";
@@ -295,7 +299,31 @@ function AppRoutes() {
         path="/library"
         element={
           <ClientRoute>
-            <ContentLibraryPage />
+            <LibraryPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ClientRoute>
+            <CloneTemplatePage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/variations"
+        element={
+          <ClientRoute>
+            <VariationsPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/editor"
+        element={
+          <ClientRoute>
+            <PostEditorPage />
           </ClientRoute>
         }
       />

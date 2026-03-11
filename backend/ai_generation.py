@@ -255,8 +255,8 @@ async def composite_post_image(
         print(f"Composite error: {e}")
         return background_image  # Return original if composite fails
 
-async def generate_content_swipe(brand_dna: dict, menu_items: list, count: int = 3, language: str = "English") -> list:
-    """Generate multiple creatives for Content Swipe feature"""
+async def generate_content_swipe(brand_dna: dict, menu_items: list, count: int = 3, language: str = "English", user_preferences: list = None) -> list:
+    """Generate multiple creatives for Content Swipe feature with AI learning"""
     creatives = []
     
     # Build brand context
@@ -271,6 +271,30 @@ Language: {language}
 Use Emojis: {brand_dna.get('use_emojis', True)}
 """
     
+    # Add learning context from user preferences
+    preference_context = ""
+    if user_preferences and len(user_preferences) > 0:
+        saved_styles = [p for p in user_preferences if p.get('action') == 'save']
+        discarded_styles = [p for p in user_preferences if p.get('action') == 'discard']
+        
+        if saved_styles:
+            saved_colors = list(set([p.get('style') for p in saved_styles if p.get('style')]))[:3]
+            saved_headlines = [p.get('headline_type') for p in saved_styles if p.get('headline_type')]
+            
+            preference_context = f"""
+USER PREFERENCES (learn from these):
+- Preferred colors: {', '.join(saved_colors) if saved_colors else 'warm tones'}
+- Headline style: {'short and punchy' if saved_headlines and 'short' in str(saved_headlines) else 'descriptive'}
+- User tends to save content with: emotional appeal, clear CTA
+"""
+        
+        if discarded_styles:
+            discarded_colors = list(set([p.get('style') for p in discarded_styles if p.get('style')]))[:3]
+            preference_context += f"""
+AVOID these styles (user discarded them):
+- Colors to avoid: {', '.join(discarded_colors) if discarded_colors else 'none noted'}
+"""
+    
     for i in range(count):
         try:
             # Pick a menu item (cycle through)
@@ -279,6 +303,7 @@ Use Emojis: {brand_dna.get('use_emojis', True)}
             # Generate text with Gemini
             text_prompt = f"""
 {brand_context}
+{preference_context}
 
 Create social media post content for: {item.get('name', 'Special Item')}
 Description: {item.get('description', '')}
