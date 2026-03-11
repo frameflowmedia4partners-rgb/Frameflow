@@ -14,15 +14,24 @@ import base64
 import asyncio
 import requests
 import httpx
+import aiohttp
 import secrets
 import json
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from auth import hash_password, verify_password, create_access_token, get_current_user
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
-from emergentintegrations.llm.openai.video_generation import OpenAIVideoGeneration
+
+# Import AI generation module
+from ai_generation import (
+    generate_text_gemini,
+    generate_image_dalle,
+    generate_content_swipe,
+    generate_concept_post,
+    generate_variations,
+    chat_with_ai,
+    composite_post_image
+)
 from cryptography.fernet import Fernet
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -143,6 +152,67 @@ class GenerateContentRequest(BaseModel):
     prompt: str
     brand_id: Optional[str] = None
     type: str = "post"
+
+# New models for client dashboard
+class BrandDNARequest(BaseModel):
+    # Step 1 - Website
+    website_url: Optional[str] = None
+    # Step 2 - Business Info
+    name: str
+    type: str = "cafe"  # cafe, bakery, restaurant, cloud_kitchen
+    language: str = "English"  # English, Hindi, Bengali
+    # Step 3 - Menu Items
+    menu_items: List[Dict] = []
+    # Step 4 - Brand Identity
+    colors: List[str] = []
+    fonts: List[str] = []
+    logo_url: Optional[str] = None
+    mission: Optional[str] = None
+    unique_claims: Optional[str] = None
+    use_emojis: bool = True
+    extra_guidelines: Optional[str] = None
+    # How You Speak
+    tone: str = "casual"  # luxury, casual, playful, professional
+    words_to_use: Optional[str] = None
+    words_to_avoid: Optional[str] = None
+    good_copy_examples: Optional[str] = None
+    bad_copy_examples: Optional[str] = None
+    # Where You Compete
+    target_audience: Optional[str] = None
+    competitor_urls: List[str] = []
+    competitor_strengths: Optional[str] = None
+    differentiator: Optional[str] = None
+    niches: List[str] = []
+    # Contact
+    phone: Optional[str] = None
+    show_delivery_badges: bool = True
+    # Credits
+    monthly_credits: int = 250
+    credits_used: int = 0
+
+class ContentSwipeRequest(BaseModel):
+    count: int = 3  # 2, 3, 5, or 6
+
+class ConceptRequest(BaseModel):
+    product: str
+    format_size: str = "feed"  # feed, story, reel_cover
+    angle: str = "promotion"
+    brief: Optional[str] = None
+
+class VariationRequest(BaseModel):
+    post_id: str
+    count: int = 3
+
+class ChatMessageRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+
+class SavePreferenceRequest(BaseModel):
+    post_id: str
+    action: str  # save, discard
+    style: Optional[str] = None
+    colors: Optional[List[str]] = None
+    headline_type: Optional[str] = None
     platform: Optional[str] = None
     tone: Optional[str] = None
 
@@ -1119,6 +1189,352 @@ async def update_brand_profile(request: BrandProfileRequest, current_user: dict 
     )
     
     return {"success": True}
+
+# ==================== NEW CLIENT DASHBOARD ENDPOINTS ====================
+
+@api_router.post("/brand-dna")
+async def save_brand_dna(request: BrandDNARequest, current_user: dict = Depends(get_current_user)):
+    """Save complete Brand DNA profile"""
+    dna_data = request.model_dump()
+    dna_data["user_id"] = current_user["user_id"]
+    dna_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    dna_data["credits_reset_date"] = datetime.now(timezone.utc).replace(day=1).isoformat()
+    
+    # Calculate DNA completion percentage
+    fields = ['name', 'type', 'colors', 'logo_url', 'tone', 'target_audience', 'menu_items']
+    filled = sum(1 for f in fields if dna_data.get(f))
+    dna_data["completion_percent"] = int((filled / len(fields)) * 100)
+    
+    await db.brand_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": dna_data},
+        upsert=True
+    )
+    
+    # Mark onboarding complete
+    await db.users.update_one(
+        {"_id": current_user["user_id"]},
+        {"$set": {"onboarding_complete": True}}
+    )
+    
+    return {"success": True, "completion_percent": dna_data["completion_percent"]}
+
+@api_router.get("/brand-dna")
+async def get_brand_dna(current_user: dict = Depends(get_current_user)):
+    """Get Brand DNA profile with credits info"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    
+    if not brand:
+        return {
+            "name": "",
+            "monthly_credits": 250,
+            "credits_used": 0,
+            "credits_remaining": 250,
+            "completion_percent": 0
+        }
+    
+    # Check if credits need reset (1st of month)
+    reset_date = brand.get("credits_reset_date")
+    if reset_date:
+        reset_dt = datetime.fromisoformat(reset_date.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        if now.month != reset_dt.month or now.year != reset_dt.year:
+            # Reset credits
+            brand["credits_used"] = 0
+            brand["credits_reset_date"] = now.replace(day=1).isoformat()
+            await db.brand_profiles.update_one(
+                {"user_id": current_user["user_id"]},
+                {"$set": {"credits_used": 0, "credits_reset_date": brand["credits_reset_date"]}}
+            )
+    
+    brand["credits_remaining"] = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    return brand
+
+@api_router.post("/content-swipe/generate")
+async def generate_content_swipe_posts(request: ContentSwipeRequest, current_user: dict = Depends(get_current_user)):
+    """Generate multiple creatives for Content Swipe"""
+    # Check credits
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    credits_remaining = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    credits_needed = request.count  # 1 credit per image post
+    
+    if credits_remaining < credits_needed:
+        raise HTTPException(status_code=403, detail="Monthly credit limit reached. Contact your account manager.")
+    
+    # Generate creatives
+    creatives = await generate_content_swipe(
+        brand_dna=brand,
+        menu_items=brand.get("menu_items", []),
+        count=request.count,
+        language=brand.get("language", "English")
+    )
+    
+    # Deduct credits
+    await db.brand_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$inc": {"credits_used": len(creatives)}}
+    )
+    
+    return {
+        "creatives": creatives,
+        "credits_used": len(creatives),
+        "credits_remaining": credits_remaining - len(creatives)
+    }
+
+@api_router.post("/content-swipe/save-preference")
+async def save_content_preference(request: SavePreferenceRequest, current_user: dict = Depends(get_current_user)):
+    """Save user's content preference (save/discard) for AI learning"""
+    preference = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "post_id": request.post_id,
+        "action": request.action,
+        "style": request.style,
+        "colors": request.colors,
+        "headline_type": request.headline_type,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.content_preferences.insert_one(preference)
+    return {"success": True}
+
+@api_router.post("/concept/generate")
+async def generate_concept(request: ConceptRequest, current_user: dict = Depends(get_current_user)):
+    """Generate a concept post"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Check credits
+    credits_remaining = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    if credits_remaining < 1:
+        raise HTTPException(status_code=403, detail="Monthly credit limit reached")
+    
+    result = await generate_concept_post(
+        brand_dna=brand,
+        product=request.product,
+        format_size=request.format_size,
+        angle=request.angle,
+        brief=request.brief or "",
+        language=brand.get("language", "English")
+    )
+    
+    # Deduct 1 credit
+    await db.brand_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$inc": {"credits_used": 1}}
+    )
+    
+    return result
+
+@api_router.post("/variations/generate")
+async def generate_post_variations(request: VariationRequest, current_user: dict = Depends(get_current_user)):
+    """Generate variations of an existing post"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Get original post from library
+    original = await db.content_library.find_one({
+        "id": request.post_id,
+        "user_id": current_user["user_id"]
+    }, {"_id": 0})
+    
+    if not original:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    variations = await generate_variations(original, brand, request.count)
+    return {"variations": variations}
+
+@api_router.post("/chat")
+async def ai_chat(request: ChatMessageRequest, current_user: dict = Depends(get_current_user)):
+    """AI Chat Assistant"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        brand = {"name": "Your Café"}
+    
+    # Get chat history
+    conversation_id = request.conversation_id or str(uuid.uuid4())
+    history = await db.chat_history.find(
+        {"user_id": current_user["user_id"], "conversation_id": conversation_id}
+    ).sort("timestamp", 1).to_list(20)
+    
+    chat_history = [{"role": h.get("role"), "content": h.get("content")} for h in history]
+    
+    # Get AI response
+    response = await chat_with_ai(request.message, brand, chat_history)
+    
+    # Save to history
+    now = datetime.now(timezone.utc).isoformat()
+    await db.chat_history.insert_many([
+        {
+            "user_id": current_user["user_id"],
+            "conversation_id": conversation_id,
+            "role": "user",
+            "content": request.message,
+            "timestamp": now
+        },
+        {
+            "user_id": current_user["user_id"],
+            "conversation_id": conversation_id,
+            "role": "assistant",
+            "content": response,
+            "timestamp": now
+        }
+    ])
+    
+    return {
+        "response": response,
+        "conversation_id": conversation_id
+    }
+
+@api_router.get("/templates/library")
+async def get_template_library(category: Optional[str] = None):
+    """Get pre-loaded templates"""
+    query = {}
+    if category:
+        query["category"] = category
+    
+    templates = await db.templates.find(query, {"_id": 0}).to_list(100)
+    
+    # If no templates exist, return default set
+    if not templates:
+        templates = [
+            {"id": "t1", "name": "Modern Café", "category": "cafe", "preview_url": "", "style": "minimal"},
+            {"id": "t2", "name": "Bakery Fresh", "category": "bakery", "preview_url": "", "style": "warm"},
+            {"id": "t3", "name": "Restaurant Elegant", "category": "restaurant", "preview_url": "", "style": "luxury"},
+            {"id": "t4", "name": "Dessert Heaven", "category": "desserts", "preview_url": "", "style": "playful"},
+            {"id": "t5", "name": "Festival Special", "category": "festival", "preview_url": "", "style": "vibrant"},
+            {"id": "t6", "name": "Offer Banner", "category": "offers", "preview_url": "", "style": "bold"},
+        ]
+    
+    return templates
+
+@api_router.post("/templates/clone")
+async def clone_template(template_id: str, current_user: dict = Depends(get_current_user)):
+    """Clone and rebrand a template"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Get template
+    template = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not template:
+        # Use default template
+        template = {"name": "Default Template", "style": "modern"}
+    
+    # Generate rebranded version
+    result = await generate_concept_post(
+        brand_dna=brand,
+        product=brand.get("menu_items", [{}])[0].get("name", "Signature Item"),
+        format_size="feed",
+        angle="promotion",
+        brief=f"Rebranding template: {template.get('name')} with {template.get('style')} style",
+        language=brand.get("language", "English")
+    )
+    
+    # Deduct 1 credit
+    await db.brand_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$inc": {"credits_used": 1}}
+    )
+    
+    return result
+
+@api_router.get("/library/boards")
+async def get_library_boards(current_user: dict = Depends(get_current_user)):
+    """Get library boards"""
+    boards = await db.boards.find({"user_id": current_user["user_id"]}, {"_id": 0}).to_list(50)
+    
+    # Add default boards
+    default_boards = [
+        {"id": "all", "name": "All Visuals", "is_default": True},
+        {"id": "favourites", "name": "Favourites", "is_default": True}
+    ]
+    
+    return default_boards + boards
+
+@api_router.post("/library/boards")
+async def create_board(name: str, current_user: dict = Depends(get_current_user)):
+    """Create a custom board"""
+    board = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["user_id"],
+        "name": name,
+        "is_default": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.boards.insert_one(board)
+    return board
+
+@api_router.post("/library/items/{item_id}/favourite")
+async def toggle_favourite(item_id: str, current_user: dict = Depends(get_current_user)):
+    """Toggle favourite status"""
+    item = await db.content_library.find_one({
+        "id": item_id,
+        "user_id": current_user["user_id"]
+    })
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    new_status = not item.get("is_favourite", False)
+    await db.content_library.update_one(
+        {"id": item_id},
+        {"$set": {"is_favourite": new_status}}
+    )
+    
+    return {"is_favourite": new_status}
+
+@api_router.post("/scrape-website")
+async def scrape_website(url: str, current_user: dict = Depends(get_current_user)):
+    """Scrape website for brand info"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as resp:
+                if resp.status != 200:
+                    return {"error": "Could not reach website"}
+                
+                html = await resp.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # Extract info
+                title = soup.find('title')
+                brand_name = title.text.strip() if title else ""
+                
+                # Get meta description
+                description = ""
+                meta_desc = soup.find('meta', {'name': 'description'})
+                if meta_desc:
+                    description = meta_desc.get('content', '')
+                
+                # Get logo
+                logo_url = ""
+                logo = soup.find('img', {'class': lambda x: x and 'logo' in x.lower()}) or \
+                       soup.find('img', {'alt': lambda x: x and 'logo' in x.lower()})
+                if logo:
+                    logo_url = urljoin(url, logo.get('src', ''))
+                
+                # Get colors from CSS
+                colors = []
+                style_tags = soup.find_all('style')
+                for style in style_tags:
+                    hex_colors = re.findall(r'#[0-9A-Fa-f]{6}', style.text)
+                    colors.extend(hex_colors[:3])
+                
+                return {
+                    "brand_name": brand_name,
+                    "description": description,
+                    "logo_url": logo_url,
+                    "colors": list(set(colors))[:3],
+                    "url": url
+                }
+                
+    except Exception as e:
+        return {"error": f"Failed to scrape: {str(e)}"}
 
 # ==================== CONTENT LIBRARY ====================
 

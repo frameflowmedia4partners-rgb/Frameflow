@@ -9,6 +9,15 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import LandingPage from "@/pages/LandingPage";
 import AuthPage from "@/pages/AuthPage";
 import OnboardingPage from "@/pages/OnboardingPage";
+
+// New Client Dashboard Pages
+import HomeDashboard from "@/pages/HomeDashboard";
+import ContentSwipePage from "@/pages/ContentSwipePage";
+import BrandDNAPage from "@/pages/BrandDNAPage";
+import AIChatPage from "@/pages/AIChatPage";
+import ConceptPage from "@/pages/ConceptPage";
+
+// Legacy Pages (keeping for compatibility)
 import DashboardPage from "@/pages/DashboardPage";
 import IdeasPage from "@/pages/IdeasPage";
 import CreateContentPage from "@/pages/CreateContentPage";
@@ -182,12 +191,52 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <ClientRoute>
-            <DashboardPage />
+            <HomeDashboard />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/content-swipe"
+        element={
+          <ClientRoute>
+            <ContentSwipePage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/concept"
+        element={
+          <ClientRoute>
+            <ConceptPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/dna"
+        element={
+          <ClientRoute>
+            <BrandDNAPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <ClientRoute>
+            <AIChatPage />
           </ClientRoute>
         }
       />
       <Route
         path="/ideas"
+        element={
+          <ClientRoute>
+            <IdeasPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/inspo"
         element={
           <ClientRoute>
             <IdeasPage />
