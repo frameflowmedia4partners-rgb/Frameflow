@@ -119,6 +119,11 @@ class AdminNoteRequest(BaseModel):
     client_id: str
     message: str
 
+class AdminCreditRequest(BaseModel):
+    action: str  # "add_bonus", "set_limit", "reset", "deduct"
+    amount: Optional[int] = None  # For add_bonus, set_limit, deduct
+    reason: str = ""
+
 class OnboardingBrandDNARequest(BaseModel):
     logo_url: Optional[str] = None
     sample_images: List[str] = []
@@ -622,6 +627,180 @@ async def admin_impersonate_client(client_id: str, admin_user: dict = Depends(ge
         "token": token,
         "client_name": client.get("full_name"),
         "client_email": client["email"]
+    }
+
+# ==================== ADMIN CREDIT MANAGEMENT ====================
+
+@api_router.get("/admin/clients/{client_id}/credits")
+async def admin_get_client_credits(client_id: str, admin_user: dict = Depends(get_super_admin)):
+    """Get detailed credit info for a client"""
+    client = await db.users.find_one({"id": client_id, "role": "client_user"}, {"_id": 0, "password_hash": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    brand = await db.brand_profiles.find_one({"user_id": client_id}, {"_id": 0})
+    
+    # Get credit history
+    credit_history = await db.credit_history.find(
+        {"user_id": client_id}
+    ).sort("timestamp", -1).limit(50).to_list(50)
+    
+    return {
+        "client_id": client_id,
+        "client_name": client.get("full_name"),
+        "email": client.get("email"),
+        "credits_used": brand.get("credits_used", 0) if brand else 0,
+        "monthly_credits": brand.get("monthly_credits", 250) if brand else 250,
+        "bonus_credits": brand.get("bonus_credits", 0) if brand else 0,
+        "total_available": (brand.get("monthly_credits", 250) + brand.get("bonus_credits", 0) - brand.get("credits_used", 0)) if brand else 250,
+        "credits_reset_date": brand.get("credits_reset_date") if brand else None,
+        "credit_history": credit_history
+    }
+
+@api_router.post("/admin/clients/{client_id}/credits")
+async def admin_manage_client_credits(
+    client_id: str, 
+    request: AdminCreditRequest, 
+    admin_user: dict = Depends(get_super_admin)
+):
+    """Manage credits for a client"""
+    client = await db.users.find_one({"id": client_id, "role": "client_user"})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    brand = await db.brand_profiles.find_one({"user_id": client_id})
+    if not brand:
+        # Create brand profile if not exists
+        brand = {
+            "user_id": client_id,
+            "monthly_credits": 250,
+            "credits_used": 0,
+            "bonus_credits": 0
+        }
+        await db.brand_profiles.insert_one(brand)
+    
+    history_entry = {
+        "id": str(uuid.uuid4()),
+        "user_id": client_id,
+        "action": request.action,
+        "amount": request.amount,
+        "reason": request.reason,
+        "admin_id": admin_user["user_id"],
+        "admin_email": admin_user.get("email"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "before_state": {
+            "credits_used": brand.get("credits_used", 0),
+            "monthly_credits": brand.get("monthly_credits", 250),
+            "bonus_credits": brand.get("bonus_credits", 0)
+        }
+    }
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    result_message = ""
+    
+    if request.action == "add_bonus":
+        if request.amount is None or request.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
+        new_bonus = brand.get("bonus_credits", 0) + request.amount
+        update_data["bonus_credits"] = new_bonus
+        result_message = f"Added {request.amount} bonus credits. New bonus total: {new_bonus}"
+        
+    elif request.action == "set_limit":
+        if request.amount is None or request.amount < 0:
+            raise HTTPException(status_code=400, detail="Amount must be non-negative")
+        update_data["monthly_credits"] = request.amount
+        result_message = f"Monthly credit limit set to {request.amount}"
+        
+    elif request.action == "reset":
+        update_data["credits_used"] = 0
+        update_data["credits_reset_date"] = datetime.now(timezone.utc).isoformat()
+        result_message = "Credits reset to 0"
+        
+    elif request.action == "deduct":
+        if request.amount is None or request.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be positive")
+        new_used = brand.get("credits_used", 0) + request.amount
+        update_data["credits_used"] = new_used
+        result_message = f"Deducted {request.amount} credits. Total used: {new_used}"
+        
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Use: add_bonus, set_limit, reset, deduct")
+    
+    # Apply update
+    await db.brand_profiles.update_one(
+        {"user_id": client_id},
+        {"$set": update_data}
+    )
+    
+    # Get updated state
+    updated_brand = await db.brand_profiles.find_one({"user_id": client_id}, {"_id": 0})
+    
+    history_entry["after_state"] = {
+        "credits_used": updated_brand.get("credits_used", 0),
+        "monthly_credits": updated_brand.get("monthly_credits", 250),
+        "bonus_credits": updated_brand.get("bonus_credits", 0)
+    }
+    
+    # Save to history
+    await db.credit_history.insert_one(history_entry)
+    
+    return {
+        "success": True,
+        "message": result_message,
+        "current_state": {
+            "credits_used": updated_brand.get("credits_used", 0),
+            "monthly_credits": updated_brand.get("monthly_credits", 250),
+            "bonus_credits": updated_brand.get("bonus_credits", 0),
+            "total_available": updated_brand.get("monthly_credits", 250) + updated_brand.get("bonus_credits", 0) - updated_brand.get("credits_used", 0)
+        }
+    }
+
+@api_router.get("/admin/credits/overview")
+async def admin_get_credits_overview(admin_user: dict = Depends(get_super_admin)):
+    """Get credit usage overview for all clients"""
+    clients = await db.users.find({"role": "client_user"}, {"_id": 0, "password_hash": 0}).to_list(500)
+    
+    overview = []
+    total_credits_used = 0
+    total_credits_available = 0
+    
+    for client in clients:
+        brand = await db.brand_profiles.find_one({"user_id": client["id"]}, {"_id": 0})
+        
+        credits_used = brand.get("credits_used", 0) if brand else 0
+        monthly_credits = brand.get("monthly_credits", 250) if brand else 250
+        bonus_credits = brand.get("bonus_credits", 0) if brand else 0
+        total_limit = monthly_credits + bonus_credits
+        
+        total_credits_used += credits_used
+        total_credits_available += total_limit
+        
+        usage_percent = (credits_used / total_limit * 100) if total_limit > 0 else 0
+        
+        overview.append({
+            "client_id": client["id"],
+            "client_name": client.get("full_name"),
+            "email": client.get("email"),
+            "credits_used": credits_used,
+            "monthly_credits": monthly_credits,
+            "bonus_credits": bonus_credits,
+            "total_limit": total_limit,
+            "remaining": total_limit - credits_used,
+            "usage_percent": round(usage_percent, 1),
+            "credits_reset_date": brand.get("credits_reset_date") if brand else None
+        })
+    
+    # Sort by usage percent (highest first)
+    overview.sort(key=lambda x: x["usage_percent"], reverse=True)
+    
+    return {
+        "clients": overview,
+        "totals": {
+            "total_clients": len(clients),
+            "total_credits_used": total_credits_used,
+            "total_credits_available": total_credits_available,
+            "average_usage_percent": round(total_credits_used / total_credits_available * 100, 1) if total_credits_available > 0 else 0
+        }
     }
 
 # ==================== BILLING TRACKER ====================
