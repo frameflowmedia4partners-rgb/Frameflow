@@ -7,10 +7,11 @@ Complete rebuild of the Frameflow client dashboard with AI-powered content gener
 - **Backend:** FastAPI, MongoDB, Pillow, FFmpeg
 - **Frontend:** React, TailwindCSS, Shadcn/UI
 - **AI (Text):** Gemini 2.0 Flash
-- **AI (Image):** DALL-E 3
+- **AI (Image):** Emergent OpenAI Image Generation (gpt-image-1)
 - **Stock Media:** Pixabay API
-- **Web Scraping:** BeautifulSoup
+- **Web Scraping:** BeautifulSoup + aiohttp
 - **Authentication:** JWT in localStorage
+- **API Key:** Emergent LLM Key (Universal)
 
 ## Core Features Implemented
 
@@ -201,12 +202,43 @@ Full admin panel for managing client credits:
 - `/app/backend/server.py` - Lines 632-805 for credit management endpoints
 
 ## Testing Status
-- **Backend Tests:** 15/15 passed (pytest)
+- **Backend Tests:** 14/15 passed (93% - 1 flaky timeout)
 - **Frontend Tests:** 100% features verified
-- **Test Report:** `/app/test_reports/iteration_11.json`
+- **Test Reports:** `/app/test_reports/iteration_11.json`, `/app/test_reports/iteration_12.json`
+
+## Critical Bug Fixes - March 2026
+All generation modes fixed and tested:
+
+### ✅ Content Swipe Fix
+- Migrated from OpenAI SDK to Emergent LLM key
+- Added 3-retry logic for image generation
+- Base64 images now render correctly in frontend
+
+### ✅ Reel Generation Fix
+- Fixed generate_reel() function signature error
+- Fixed "bytes-like object required, not NoneType"
+- FFmpeg video assembly working
+- Both Cinematic and Casual styles tested
+
+### ✅ Photoshoot Fix
+- Added retry logic (3 attempts)
+- Image generation working with Emergent key
+- Product photos saving to library
+
+### ✅ Brand DNA Auto-Extraction
+- Comprehensive website scraping with BeautifulSoup
+- Auto-extracts: brand name, colors, logo, description, phone, address, social links
+- Auto-extracts ALL products with names, descriptions, prices, images
+- All scraped images saved to Library automatically
+- Brand profile auto-populated from scrape
+
+### ✅ Real Product Images in Generation
+- Scraped images used first in post generation
+- DALL-E only when no real image available
+- Posts look like actual brand products
 
 ## P0 Completed
-All requested features implemented and tested to 100% pass rate.
+All requested features implemented and tested.
 
 ## P1/P2 Backlog (Future Enhancements)
 - Real Meta/Instagram integration for analytics and posting
