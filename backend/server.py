@@ -30,7 +30,8 @@ from ai_generation import (
     generate_concept_post,
     generate_variations,
     chat_with_ai,
-    composite_post_image
+    composite_post_image,
+    scrape_website_for_dna
 )
 from reel_generation import generate_reel
 from cryptography.fernet import Fernet
@@ -236,6 +237,8 @@ class ReelGenerateRequest(BaseModel):
     style: str = "cinematic"
     music_mood: str = "upbeat"
     platform: str = "instagram"
+    product: Optional[str] = None
+    language: Optional[str] = "English"
 
 class PostGenerateRequest(BaseModel):
     product_name: str
@@ -1717,50 +1720,82 @@ async def toggle_favourite(item_id: str, current_user: dict = Depends(get_curren
     return {"is_favourite": new_status}
 
 @api_router.post("/scrape-website")
-async def scrape_website(url: str, current_user: dict = Depends(get_current_user)):
-    """Scrape website for brand info"""
+async def scrape_website_endpoint(url: str, current_user: dict = Depends(get_current_user)):
+    """Comprehensive website scraping for Brand DNA auto-extraction"""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=15) as resp:
-                if resp.status != 200:
-                    return {"error": "Could not reach website"}
-                
-                html = await resp.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # Extract info
-                title = soup.find('title')
-                brand_name = title.text.strip() if title else ""
-                
-                # Get meta description
-                description = ""
-                meta_desc = soup.find('meta', {'name': 'description'})
-                if meta_desc:
-                    description = meta_desc.get('content', '')
-                
-                # Get logo
-                logo_url = ""
-                logo = soup.find('img', {'class': lambda x: x and 'logo' in x.lower()}) or \
-                       soup.find('img', {'alt': lambda x: x and 'logo' in x.lower()})
-                if logo:
-                    logo_url = urljoin(url, logo.get('src', ''))
-                
-                # Get colors from CSS
-                colors = []
-                style_tags = soup.find_all('style')
-                for style in style_tags:
-                    hex_colors = re.findall(r'#[0-9A-Fa-f]{6}', style.text)
-                    colors.extend(hex_colors[:3])
-                
-                return {
-                    "brand_name": brand_name,
-                    "description": description,
-                    "logo_url": logo_url,
-                    "colors": list(set(colors))[:3],
-                    "url": url
-                }
-                
+        result = await scrape_website_for_dna(url)
+        
+        if result.get("error"):
+            return {"error": result["error"]}
+        
+        # Save scraped images to content library
+        if result.get("images"):
+            for img in result["images"][:20]:  # Limit to 20
+                await db.content_library.update_one(
+                    {"user_id": current_user["user_id"], "url": img["url"]},
+                    {"$set": {
+                        "id": str(uuid.uuid4()),
+                        "user_id": current_user["user_id"],
+                        "url": img["url"],
+                        "filename": img.get("filename", "scraped_image"),
+                        "alt": img.get("alt", ""),
+                        "tags": [img.get("alt", "scraped")] if img.get("alt") else ["scraped"],
+                        "source": "scraped",
+                        "type": "image",
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+        
+        # Update brand profile with scraped data
+        brand_update = {
+            "scraped_data": result,
+            "scraped_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Auto-fill brand fields if they're empty
+        if result.get("name"):
+            brand_update["name"] = result["name"]
+        if result.get("tagline"):
+            brand_update["tagline"] = result["tagline"]
+        if result.get("description"):
+            brand_update["mission"] = result["description"]
+        if result.get("logo_url"):
+            brand_update["logo_url"] = result["logo_url"]
+        if result.get("colors"):
+            brand_update["colors"] = result["colors"]
+        if result.get("phone"):
+            brand_update["phone"] = result["phone"]
+        if result.get("address"):
+            brand_update["address"] = result["address"]
+        if result.get("products"):
+            # Convert products to menu_items format
+            menu_items = []
+            for p in result["products"]:
+                menu_items.append({
+                    "id": str(uuid.uuid4()),
+                    "name": p.get("name", ""),
+                    "description": p.get("description", ""),
+                    "price": p.get("price", ""),
+                    "image_url": p.get("image_url", "")
+                })
+            brand_update["menu_items"] = menu_items
+        
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$set": brand_update},
+            upsert=True
+        )
+        
+        return {
+            "success": True,
+            "data": result,
+            "images_saved": len(result.get("images", [])),
+            "products_found": len(result.get("products", []))
+        }
+        
     except Exception as e:
+        logging.error(f"Website scraping error: {e}")
         return {"error": f"Failed to scrape: {str(e)}"}
 
 # ==================== CONTENT LIBRARY ====================
@@ -1952,97 +1987,103 @@ Make it authentic and engaging. All prices in ₹ (Indian Rupees)."""
 # ==================== REEL GENERATION ====================
 
 @api_router.post("/reels/generate")
-async def generate_reel(request: ReelGenerateRequest, current_user: dict = Depends(get_current_user)):
-    """Generate reel concept and script"""
-    brand_context = await get_brand_context(current_user["user_id"])
+async def generate_reel_endpoint(request: ReelGenerateRequest, current_user: dict = Depends(get_current_user)):
+    """Generate a complete video reel using FFmpeg"""
+    from reel_generation import generate_reel as create_reel
     
-    # Parse intent
-    parse_prompt = f"""Analyze this reel brief: "{request.brief}"
+    # Get brand profile
+    brand = await db.brand_profiles.find_one(
+        {"user_id": current_user["user_id"]},
+        {"_id": 0}
+    )
     
-Extract and return as JSON:
-- primary_keyword: main subject
-- secondary_keywords: related topics
-- suggested_script: array of 5-8 text overlay lines
-- music_mood: {request.music_mood}"""
-
-    chat = LlmChat(
-        api_key=os.environ['EMERGENT_LLM_KEY'],
-        session_id=str(uuid.uuid4()),
-        system_message="You are a viral reel creator for cafés. Return JSON only."
-    ).with_model("openai", "gpt-5.2")
+    # Check credits (reels cost 5 credits)
+    credits_limit = brand.get('monthly_credits', 250) + brand.get('bonus_credits', 0) if brand else 250
+    credits_used = brand.get('credits_used', 0) if brand else 0
+    credits_remaining = credits_limit - credits_used
     
-    intent_response = await chat.send_message(UserMessage(text=parse_prompt))
+    if credits_remaining < 5:
+        raise HTTPException(status_code=402, detail="Insufficient credits. Reels require 5 credits.")
+    
+    # Build brand DNA for reel generation
+    brand_dna = {
+        "name": brand.get("name", brand.get("business_name", "Café")) if brand else "Café",
+        "type": brand.get("type", "Café"),
+        "tone": brand.get("tone", "warm and inviting"),
+        "colors": brand.get("colors", ["#6366f1"]),
+        "target_audience": brand.get("target_audience", "coffee lovers"),
+        "unique_claims": brand.get("unique_claims", "quality coffee"),
+        "logo_url": brand.get("logo_url", ""),
+        "phone": brand.get("phone", ""),
+        "website_url": brand.get("website_url", ""),
+        "show_delivery_badges": brand.get("show_delivery_badges", True)
+    }
+    
+    # Get menu item if product specified
+    menu_item = None
+    if request.product:
+        menu_items = brand.get("menu_items", []) if brand else []
+        for item in menu_items:
+            if item.get("name", "").lower() == request.product.lower():
+                menu_item = item
+                break
+        if not menu_item:
+            menu_item = {"name": request.product, "description": ""}
     
     try:
-        intent = json.loads(intent_response)
-    except:
-        intent = {
-            "primary_keyword": request.brief.split()[0] if request.brief else "coffee",
-            "secondary_keywords": [],
-            "suggested_script": ["Scene 1", "Scene 2", "Scene 3"],
-            "music_mood": request.music_mood
-        }
-    
-    # Search for media
-    keyword = intent.get("primary_keyword", "")
-    media_items = await db.content_library.find({
-        "user_id": current_user["user_id"],
-        "$or": [
-            {"filename": {"$regex": keyword, "$options": "i"}},
-            {"tags": {"$regex": keyword, "$options": "i"}},
-            {"source": "scraped"}
-        ]
-    }, {"_id": 0}).to_list(10)
-    
-    # If no media, try to get scraped images from website
-    if not media_items:
-        media_items = await db.content_library.find({
+        # Generate the reel
+        result = await create_reel(
+            brand_dna=brand_dna,
+            brief=request.brief,
+            style=request.style,
+            language=request.language or "English",
+            menu_item=menu_item
+        )
+        
+        if not result or not result.get("video_base64"):
+            raise HTTPException(status_code=500, detail="Failed to generate reel video")
+        
+        # Deduct 5 credits
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$inc": {"credits_used": 5}}
+        )
+        
+        # Save to library
+        item_id = str(uuid.uuid4())
+        await db.content_library.insert_one({
+            "id": item_id,
             "user_id": current_user["user_id"],
-            "source": "scraped"
-        }, {"_id": 0}).to_list(6)
-    
-    # Generate media suggestions with actual URLs if available
-    media_suggestions = []
-    for i in range(6):
-        if i < len(media_items) and media_items[i].get("url"):
-            media_suggestions.append({
-                "url": media_items[i].get("url"),
-                "description": f"Scene {i+1}: {media_items[i].get('filename', keyword)}",
-                "type": "image",
-                "source": media_items[i].get("source", "library")
-            })
-        else:
-            media_suggestions.append({
-                "description": f"Scene {i+1}: {keyword} shot",
-                "type": "image",
-                "source": "suggestion"
-            })
-    
-    # Generate full reel concept
-    concept_prompt = f"""{brand_context}
-
-Create a complete reel production plan:
-Brief: {request.brief}
-Style: {request.style}
-Music Mood: {request.music_mood}
-
-Include:
-1. HOOK (0-3 seconds) - what to show and text overlay
-2. SCENE BREAKDOWN (6-8 scenes with timestamps, visuals, text overlays)
-3. CAPTION with hashtags
-4. Music suggestions (royalty-free)
-5. Best posting time"""
-
-    concept = await chat.send_message(UserMessage(text=concept_prompt))
-    
-    return {
-        "script": concept,
-        "concept": concept,
-        "intent": intent,
-        "media_suggestions": media_suggestions,
-        "style": request.style,
-        "music_mood": request.music_mood
-    }
+            "type": "video",
+            "filename": f"reel_{request.style}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.mp4",
+            "url": f"data:video/mp4;base64,{result['video_base64']}",
+            "source": "reel_generation",
+            "caption": result.get("caption", ""),
+            "hashtags": result.get("hashtags", []),
+            "style": request.style,
+            "duration": result.get("duration", 15),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {
+            "video_base64": result["video_base64"],
+            "caption": result.get("caption", ""),
+            "hashtags": result.get("hashtags", []),
+            "duration": result.get("duration", 15),
+            "style": request.style,
+            "frames_count": result.get("frames_count", 5),
+            "id": item_id,
+            "credits_used": 5,
+            "credits_remaining": credits_remaining - 5
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Reel generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate reel: {str(e)}")
 
 # ==================== IDEAS ENGINE ====================
 
@@ -2630,11 +2671,15 @@ async def generate_photoshoot(request: PhotoshootRequest, current_user: dict = D
     
     brief = request.brief or ""
     
-    # Generate image
+    # Generate image with retry
     try:
         image_bytes = await generate_image_dalle(
-            f"Professional product photography of {product_name}. {brief}. Clean, high-end, commercial quality, natural lighting, NO text, NO logos, NO watermarks."
+            f"Professional product photography of {product_name}. {brief}. Clean, high-end, commercial quality, natural lighting, NO text, NO logos, NO watermarks.",
+            retries=3
         )
+        
+        if not image_bytes:
+            raise HTTPException(status_code=500, detail="Image generation failed after multiple retries")
         
         image_base64 = base64.b64encode(image_bytes).decode('utf-8')
         

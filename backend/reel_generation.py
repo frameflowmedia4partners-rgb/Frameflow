@@ -1,5 +1,6 @@
 """
 Reel Generation Module - Creates video reels using FFmpeg
+Uses Emergent OpenAI Image Generation for visuals
 """
 import os
 import io
@@ -10,41 +11,32 @@ import subprocess
 import json
 import asyncio
 import aiohttp
-import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+import google.generativeai as genai
+from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
 
 # API Keys
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
-PIXABAY_API_KEY = os.environ.get('PIXABAY_API_KEY', '')
+EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
-async def search_pixabay_music(query: str = "cafe lofi jazz") -> str:
-    """Search Pixabay for royalty-free music and return MP3 URL"""
-    try:
-        url = f"https://pixabay.com/api/videos/"
-        params = {
-            "key": PIXABAY_API_KEY,
-            "q": query,
-            "video_type": "all",
-            "per_page": 10
-        }
-        
-        # Pixabay doesn't have direct audio API, so we'll use a default track URL
-        # In production, you'd use their audio endpoint or integrate with another service
-        # For now, return a placeholder that the frontend can handle
-        return "default_cafe_music"
-        
-    except Exception as e:
-        print(f"Pixabay search error: {e}")
-        return "default_cafe_music"
+# Initialize
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+image_generator = None
+if EMERGENT_LLM_KEY:
+    image_generator = OpenAIImageGeneration(api_key=EMERGENT_LLM_KEY)
 
 async def generate_reel_text(brand_dna: dict, brief: str, style: str, language: str = "English") -> dict:
     """Generate reel text content using Gemini"""
-    import google.generativeai as genai
-    
-    genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-2.0-flash')
     
     style_guide = {
@@ -78,7 +70,7 @@ Return ONLY valid JSON:
 """
     
     try:
-        response = model.generate_content(prompt)
+        response = await asyncio.to_thread(model.generate_content, prompt)
         text = response.text.strip()
         
         # Parse JSON
@@ -87,10 +79,15 @@ Return ONLY valid JSON:
             if text.startswith('json'):
                 text = text[4:]
         
+        # Find JSON in response
+        start = text.find('{')
+        end = text.rfind('}') + 1
+        if start >= 0 and end > start:
+            text = text[start:end]
+        
         return json.loads(text)
     except Exception as e:
         print(f"Gemini text generation error: {e}")
-        # Return defaults
         return {
             "hook_text": "You Won't Believe This!",
             "story_text": "Crafted with passion, served with love. Experience the difference.",
@@ -100,32 +97,39 @@ Return ONLY valid JSON:
             "hashtags": ["#cafe", "#coffee", "#foodie", "#coffeelover", "#barista", "#cafelife", "#instafood", "#delicious"]
         }
 
-async def generate_reel_image(prompt: str, size: str = "1024x1792") -> bytes:
-    """Generate image using DALL-E 3"""
-    from openai import OpenAI
-    
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    
-    enhanced_prompt = f"{prompt}. Professional food photography, high-end restaurant quality, warm lighting, appetizing presentation. No text, no logos, no watermarks."
-    
-    try:
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=enhanced_prompt,
-            size=size,
-            quality="hd",
-            n=1,
-            response_format="b64_json"
-        )
-        
-        return base64.b64decode(response.data[0].b64_json)
-    except Exception as e:
-        print(f"DALL-E 3 error: {e}")
+async def generate_reel_image(prompt: str, retries: int = 3) -> bytes:
+    """Generate image using Emergent OpenAI Image Generation with retry logic"""
+    if not image_generator:
+        print("Image generator not initialized")
         # Return a placeholder colored image
         img = Image.new('RGB', (1024, 1792), color=(99, 102, 241))
         buffer = io.BytesIO()
         img.save(buffer, format='PNG')
         return buffer.getvalue()
+    
+    enhanced_prompt = f"{prompt}. Professional food photography, high-end restaurant quality, warm lighting, appetizing presentation. No text, no logos, no watermarks."
+    
+    for attempt in range(retries):
+        try:
+            print(f"Reel image generation attempt {attempt + 1}/{retries}")
+            images = await image_generator.generate_images(
+                prompt=enhanced_prompt,
+                model="gpt-image-1",
+                number_of_images=1
+            )
+            if images and len(images) > 0:
+                print(f"Image generated successfully, size: {len(images[0])} bytes")
+                return images[0]
+        except Exception as e:
+            print(f"Image generation error (attempt {attempt + 1}): {e}")
+            if attempt < retries - 1:
+                await asyncio.sleep(2)
+    
+    # Return placeholder on failure
+    img = Image.new('RGB', (1024, 1792), color=(99, 102, 241))
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return buffer.getvalue()
 
 def create_text_frame(
     width: int,
@@ -140,19 +144,19 @@ def create_text_frame(
     contact_info: dict = None
 ) -> bytes:
     """Create a text frame with brand styling"""
-    # Convert hex to RGB
     def hex_to_rgb(hex_color):
         hex_color = hex_color.lstrip('#')
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        try:
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        except:
+            return (99, 102, 241)
     
     bg_rgb = hex_to_rgb(bg_color)
     text_rgb = hex_to_rgb(text_color)
     
-    # Create image
     img = Image.new('RGB', (width, height), color=bg_rgb)
     draw = ImageDraw.Draw(img)
     
-    # Try to load a good font
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -172,7 +176,7 @@ def create_text_frame(
         font = ImageFont.load_default()
     
     # Draw text centered
-    lines = text.split('\n')
+    lines = text.split('\n') if text else [""]
     total_height = len(lines) * (font_size + 20)
     y_start = (height - total_height) // 2
     
@@ -182,24 +186,25 @@ def create_text_frame(
         x = (width - text_width) // 2
         y = y_start + i * (font_size + 20)
         
-        # Draw shadow
+        # Shadow
         draw.text((x + 3, y + 3), line, fill=(0, 0, 0, 128), font=font)
-        # Draw text
         draw.text((x, y), line, fill=text_rgb, font=font)
     
     # Add logo if provided
-    if logo_base64:
+    if logo_base64 and logo_base64.startswith('data:'):
         try:
-            logo_data = base64.b64decode(logo_base64.split(',')[-1] if ',' in logo_base64 else logo_base64)
+            logo_data = base64.b64decode(logo_base64.split(',')[-1])
             logo = Image.open(io.BytesIO(logo_data))
             logo_size = min(width // 4, 200)
             logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-            # Position logo at center top
             logo_x = (width - logo_size) // 2
             logo_y = height // 6
-            img.paste(logo, (logo_x, logo_y), logo if logo.mode == 'RGBA' else None)
-        except:
-            pass
+            if logo.mode == 'RGBA':
+                img.paste(logo, (logo_x, logo_y), logo)
+            else:
+                img.paste(logo, (logo_x, logo_y))
+        except Exception as e:
+            print(f"Logo error: {e}")
     
     # Add brand name below logo
     if brand_name:
@@ -215,15 +220,15 @@ def create_text_frame(
     
     # Add delivery badges
     if include_badges:
-        badge_y = height - 200
-        badge_texts = ["🛵 Swiggy", "🍽️ Zomato"]
-        for i, badge in enumerate(badge_texts):
-            try:
-                badge_font = ImageFont.truetype(font_paths[0], 40) if os.path.exists(font_paths[0]) else font
+        try:
+            badge_font = ImageFont.truetype(font_paths[0], 40) if os.path.exists(font_paths[0]) else font
+            badge_y = height - 200
+            badge_texts = ["Swiggy", "Zomato"]
+            for i, badge in enumerate(badge_texts):
                 x = 100 + i * 300
                 draw.text((x, badge_y), badge, fill=text_rgb, font=badge_font)
-            except:
-                pass
+        except:
+            pass
     
     # Add contact info
     if contact_info:
@@ -232,9 +237,9 @@ def create_text_frame(
             y = height - 100
             contact_text = ""
             if contact_info.get('phone'):
-                contact_text += f"📞 {contact_info['phone']}  "
+                contact_text += f"{contact_info['phone']}  "
             if contact_info.get('website'):
-                contact_text += f"🌐 {contact_info['website']}"
+                contact_text += contact_info['website']
             if contact_text:
                 bbox = draw.textbbox((0, 0), contact_text, font=contact_font)
                 text_width = bbox[2] - bbox[0]
@@ -243,21 +248,21 @@ def create_text_frame(
         except:
             pass
     
-    # Save to bytes
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     return buffer.getvalue()
 
 def add_text_overlay(image_bytes: bytes, text: str, position: str = "bottom", opacity: float = 0.8) -> bytes:
     """Add text overlay to an image"""
+    if not image_bytes:
+        return None
+    
     img = Image.open(io.BytesIO(image_bytes))
     width, height = img.size
     
-    # Create overlay
     overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     
-    # Font
     font_size = width // 15
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -276,13 +281,11 @@ def add_text_overlay(image_bytes: bytes, text: str, position: str = "bottom", op
     if font is None:
         font = ImageFont.load_default()
     
-    # Calculate position
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
     
     if position == "bottom":
-        # Add gradient background
         gradient_height = text_height + 100
         for i in range(gradient_height):
             alpha = int(200 * (i / gradient_height) * opacity)
@@ -294,11 +297,9 @@ def add_text_overlay(image_bytes: bytes, text: str, position: str = "bottom", op
         x = (width - text_width) // 2
         y = height // 2
     
-    # Draw text with shadow
     draw.text((x + 3, y + 3), text, fill=(0, 0, 0, 180), font=font)
     draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
     
-    # Merge
     img = img.convert('RGBA')
     img = Image.alpha_composite(img, overlay)
     
@@ -308,27 +309,25 @@ def add_text_overlay(image_bytes: bytes, text: str, position: str = "bottom", op
 
 def add_watermark(image_bytes: bytes, logo_base64: str, opacity: float = 0.2) -> bytes:
     """Add watermark logo to image"""
-    if not logo_base64:
+    if not image_bytes:
+        return None
+    if not logo_base64 or not logo_base64.startswith('data:'):
         return image_bytes
     
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
         width, height = img.size
         
-        # Load logo
-        logo_data = base64.b64decode(logo_base64.split(',')[-1] if ',' in logo_base64 else logo_base64)
+        logo_data = base64.b64decode(logo_base64.split(',')[-1])
         logo = Image.open(io.BytesIO(logo_data)).convert('RGBA')
         
-        # Resize logo
         logo_size = width // 6
         logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
         
-        # Apply opacity
         alpha = logo.split()[3]
         alpha = alpha.point(lambda x: int(x * opacity))
         logo.putalpha(alpha)
         
-        # Position top-right
         x = width - logo_size - 30
         y = 30
         
@@ -355,15 +354,16 @@ async def generate_reel(
     """
     
     # Get brand colors
-    brand_color = brand_dna.get('colors', ['#6366f1'])[0] if brand_dna.get('colors') else '#6366f1'
-    logo_url = brand_dna.get('logo_url', '')
-    brand_name = brand_dna.get('name', 'Café')
-    show_badges = brand_dna.get('show_delivery_badges', True)
-    phone = brand_dna.get('phone', '')
-    website = brand_dna.get('website_url', '')
+    brand_colors = brand_dna.get('colors', ['#6366f1']) if brand_dna else ['#6366f1']
+    brand_color = brand_colors[0] if brand_colors else '#6366f1'
+    logo_url = brand_dna.get('logo_url', '') if brand_dna else ''
+    brand_name = brand_dna.get('name', 'Café') if brand_dna else 'Café'
+    show_badges = brand_dna.get('show_delivery_badges', True) if brand_dna else True
+    phone = brand_dna.get('phone', '') if brand_dna else ''
+    website = brand_dna.get('website_url', '') if brand_dna else ''
     
     # Generate text content
-    reel_text = await generate_reel_text(brand_dna, brief, style, language)
+    reel_text = await generate_reel_text(brand_dna or {}, brief, style, language)
     
     # Product info
     product_name = menu_item.get('name', 'Signature Coffee') if menu_item else 'Signature Coffee'
@@ -393,21 +393,21 @@ async def generate_reel(
             hero_img = await generate_reel_image(f"Stunning close-up of {product_name}, {product_desc}")
             hero_with_text = add_text_overlay(hero_img, reel_text['hook_text'], "bottom")
             hero_with_watermark = add_watermark(hero_with_text, logo_url if logo_url and logo_url.startswith('data:') else None)
-            frames.append(hero_with_watermark)
+            frames.append(hero_with_watermark or hero_with_text or hero_img)
             frame_durations.append(3)
             
             # Frame 3: Second angle (5-9s)
             angle2_img = await generate_reel_image(f"Another angle of {product_name}, lifestyle setting")
             angle2_with_text = add_text_overlay(angle2_img, reel_text['story_text'], "bottom")
             angle2_with_watermark = add_watermark(angle2_with_text, logo_url if logo_url and logo_url.startswith('data:') else None)
-            frames.append(angle2_with_watermark)
+            frames.append(angle2_with_watermark or angle2_with_text or angle2_img)
             frame_durations.append(4)
             
             # Frame 4: Detail shot (9-13s)
             detail_img = await generate_reel_image(f"Detail shot of {product_name}, artistic composition")
             detail_with_text = add_text_overlay(detail_img, reel_text['supporting_text'], "bottom")
             detail_with_watermark = add_watermark(detail_with_text, logo_url if logo_url and logo_url.startswith('data:') else None)
-            frames.append(detail_with_watermark)
+            frames.append(detail_with_watermark or detail_with_text or detail_img)
             frame_durations.append(4)
             
             # Frame 5: CTA (13-15s)
@@ -437,20 +437,20 @@ async def generate_reel(
             # Frame 2: Product close-up (2-6s)
             product_img = await generate_reel_image(f"Natural photo of {product_name}, casual setting")
             product_with_watermark = add_watermark(product_img, logo_url if logo_url and logo_url.startswith('data:') else None)
-            frames.append(product_with_watermark)
+            frames.append(product_with_watermark or product_img)
             frame_durations.append(4)
             
             # Frame 3: Process/making (6-11s)
             process_img = await generate_reel_image(f"Making of {product_name}, behind the scenes, barista hands")
             process_with_text = add_text_overlay(process_img, reel_text['story_text'], "bottom")
-            frames.append(process_with_text)
+            frames.append(process_with_text or process_img)
             frame_durations.append(5)
             
             # Frame 4: Final beauty shot (11-14s)
             beauty_img = await generate_reel_image(f"Beautiful presentation of {product_name}, lifestyle photo")
             beauty_with_text = add_text_overlay(beauty_img, reel_text['supporting_text'], "bottom")
             beauty_with_watermark = add_watermark(beauty_with_text, logo_url if logo_url and logo_url.startswith('data:') else None)
-            frames.append(beauty_with_watermark)
+            frames.append(beauty_with_watermark or beauty_with_text or beauty_img)
             frame_durations.append(3)
             
             # Frame 5: CTA (14-15s)
@@ -465,6 +465,15 @@ async def generate_reel(
             )
             frames.append(frame5)
             frame_durations.append(1)
+        
+        # Validate frames
+        valid_frames = [(f, d) for f, d in zip(frames, frame_durations) if f is not None]
+        if not valid_frames:
+            raise Exception("No valid frames generated")
+        
+        frames, frame_durations = zip(*valid_frames)
+        frames = list(frames)
+        frame_durations = list(frame_durations)
         
         # Create video using FFmpeg
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -488,7 +497,7 @@ async def generate_reel(
             # Output video path
             output_path = os.path.join(tmpdir, "reel.mp4")
             
-            # FFmpeg command with Ken Burns effect and warmth filter
+            # FFmpeg command
             ffmpeg_cmd = [
                 'ffmpeg', '-y',
                 '-f', 'concat',
@@ -528,4 +537,6 @@ async def generate_reel(
             
     except Exception as e:
         print(f"Reel generation error: {e}")
+        import traceback
+        traceback.print_exc()
         raise Exception(f"Failed to generate reel: {str(e)}")

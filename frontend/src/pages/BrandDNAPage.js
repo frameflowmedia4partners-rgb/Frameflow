@@ -125,13 +125,41 @@ export default function BrandDNAPage() {
       if (response.data.error) {
         toast.error(response.data.error);
       } else {
-        setFormData({
+        const scraped = response.data.data || response.data;
+        
+        // Auto-fill all available fields from comprehensive scrape
+        const updatedData = {
           ...formData,
-          name: response.data.brand_name || formData.name,
-          logo_url: response.data.logo_url || formData.logo_url,
-          colors: response.data.colors?.length ? response.data.colors : formData.colors,
-        });
-        toast.success("Website scraped! Info auto-filled.");
+          name: scraped.name || scraped.brand_name || formData.name,
+          tagline: scraped.tagline || formData.tagline,
+          mission: scraped.description || formData.mission,
+          logo_url: scraped.logo_url || formData.logo_url,
+          colors: scraped.colors?.length ? scraped.colors : formData.colors,
+          phone: scraped.phone || formData.phone,
+          address: scraped.address || formData.address,
+        };
+        
+        // Add scraped products as menu items
+        if (scraped.products && scraped.products.length > 0) {
+          const existingItems = formData.menu_items || [];
+          const newItems = scraped.products.map((p, idx) => ({
+            id: Date.now() + idx,
+            name: p.name || "",
+            description: p.description || "",
+            price: p.price || "",
+            image_url: p.image_url || "",
+          }));
+          updatedData.menu_items = [...existingItems, ...newItems];
+        }
+        
+        setFormData(updatedData);
+        
+        const imagesFound = response.data.images_saved || scraped.images?.length || 0;
+        const productsFound = response.data.products_found || scraped.products?.length || 0;
+        
+        toast.success(
+          `Website scraped! Found ${productsFound} products and ${imagesFound} images. Info auto-filled.`
+        );
       }
     } catch (error) {
       toast.error("Failed to scrape website");
