@@ -107,55 +107,90 @@ export default function ReelGenerationPage() {
     setProgressStage(0);
     setProgressPercent(0);
 
-    // Simulate progress through stages
-    const stageInterval = setInterval(() => {
-      setProgressStage(prev => {
-        if (prev >= progressStages.length - 1) {
-          clearInterval(stageInterval);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 12000); // Each stage ~12 seconds
-
-    const progressInterval = setInterval(() => {
-      setProgressPercent(prev => {
-        if (prev >= 95) {
-          clearInterval(progressInterval);
-          return 95;
-        }
-        return prev + 2;
-      });
-    }, 1200);
-
     try {
-      const response = await api.post("/reel/generate", {
+      // Start generation - returns immediately with job_id
+      const startResponse = await api.post("/reels/generate", {
         style: selectedStyle.id,
-        menu_item_id: selectedMenuItem,
+        product: selectedMenuItem,
         brief: brief,
-        music_choice: musicChoice,
+        music_mood: musicChoice === "auto" ? "upbeat" : "calm",
         language: language
       });
 
-      clearInterval(stageInterval);
-      clearInterval(progressInterval);
-      setProgressPercent(100);
-      setProgressStage(progressStages.length - 1);
+      const jobId = startResponse.data.job_id;
+      
+      if (!jobId) {
+        // Old API response - direct result
+        if (startResponse.data.video_base64) {
+          setProgressPercent(100);
+          setProgressStage(progressStages.length - 1);
+          setResult(startResponse.data);
+          setStep("preview");
+          toast.success("Reel generated successfully!");
+          setGenerating(false);
+          return;
+        }
+        throw new Error("Invalid response from server");
+      }
 
+      toast.info("Your reel is being created...");
+
+      // Poll for status every 3 seconds
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await api.get(`/reels/status/${jobId}`);
+          const { status, progress, result: jobResult, error } = statusResponse.data;
+
+          setProgressPercent(progress || 0);
+          
+          // Update stage based on progress
+          if (progress < 20) setProgressStage(0);
+          else if (progress < 40) setProgressStage(1);
+          else if (progress < 60) setProgressStage(2);
+          else if (progress < 80) setProgressStage(3);
+          else setProgressStage(4);
+
+          if (status === "completed" && jobResult) {
+            clearInterval(pollInterval);
+            setProgressPercent(100);
+            setProgressStage(progressStages.length - 1);
+            setResult(jobResult);
+            setStep("preview");
+            toast.success("Reel generated successfully!");
+            setGenerating(false);
+          } else if (status === "failed") {
+            clearInterval(pollInterval);
+            toast.error(error || "Failed to generate reel");
+            setStep("form");
+            setGenerating(false);
+          }
+        } catch (pollError) {
+          console.error("Poll error:", pollError);
+          // Continue polling unless it's a 404
+          if (pollError.response?.status === 404) {
+            clearInterval(pollInterval);
+            toast.error("Generation job not found");
+            setStep("form");
+            setGenerating(false);
+          }
+        }
+      }, 3000);
+
+      // Timeout after 3 minutes
       setTimeout(() => {
-        setResult(response.data);
-        setStep("preview");
-        toast.success("Reel generated successfully!");
-      }, 500);
+        clearInterval(pollInterval);
+        if (generating) {
+          toast.error("Generation timed out. Please try again.");
+          setStep("form");
+          setGenerating(false);
+        }
+      }, 180000);
 
     } catch (error) {
-      clearInterval(stageInterval);
-      clearInterval(progressInterval);
       console.error("Reel generation failed:", error);
-      const errorMsg = error.response?.data?.detail || "Failed to generate reel";
+      const errorMsg = error.response?.data?.detail || "Failed to start reel generation";
       toast.error(errorMsg);
       setStep("form");
-    } finally {
       setGenerating(false);
     }
   };

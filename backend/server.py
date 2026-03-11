@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Request, Query, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Request, Query, Form, BackgroundTasks
 from fastapi.responses import StreamingResponse, RedirectResponse, HTMLResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -1984,12 +1984,81 @@ Make it authentic and engaging. All prices in ₹ (Indian Rupees)."""
         "platform": request.platform
     }
 
-# ==================== REEL GENERATION ====================
+# ==================== REEL GENERATION (ASYNC) ====================
+
+# In-memory storage for reel generation jobs
+reel_jobs = {}
+
+async def process_reel_generation(job_id: str, user_id: str, brand_dna: dict, brief: str, style: str, language: str, menu_item: dict):
+    """Background task to generate reel"""
+    from reel_generation import generate_reel as create_reel
+    
+    try:
+        # Update status to processing
+        reel_jobs[job_id]["status"] = "processing"
+        reel_jobs[job_id]["progress"] = 10
+        
+        # Generate the reel
+        reel_jobs[job_id]["progress"] = 20
+        result = await create_reel(
+            brand_dna=brand_dna,
+            brief=brief,
+            style=style,
+            language=language,
+            menu_item=menu_item
+        )
+        
+        reel_jobs[job_id]["progress"] = 90
+        
+        if not result or not result.get("video_base64"):
+            reel_jobs[job_id]["status"] = "failed"
+            reel_jobs[job_id]["error"] = "Failed to generate video"
+            return
+        
+        # Deduct 5 credits
+        await db.brand_profiles.update_one(
+            {"user_id": user_id},
+            {"$inc": {"credits_used": 5}}
+        )
+        
+        # Save to library
+        item_id = str(uuid.uuid4())
+        await db.content_library.insert_one({
+            "id": item_id,
+            "user_id": user_id,
+            "type": "video",
+            "filename": f"reel_{style}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.mp4",
+            "url": f"data:video/mp4;base64,{result['video_base64']}",
+            "source": "reel_generation",
+            "caption": result.get("caption", ""),
+            "hashtags": result.get("hashtags", []),
+            "style": style,
+            "duration": result.get("duration", 15),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Mark as complete
+        reel_jobs[job_id]["status"] = "completed"
+        reel_jobs[job_id]["progress"] = 100
+        reel_jobs[job_id]["result"] = {
+            "video_base64": result["video_base64"],
+            "caption": result.get("caption", ""),
+            "hashtags": result.get("hashtags", []),
+            "duration": result.get("duration", 15),
+            "style": style,
+            "frames_count": result.get("frames_count", 5),
+            "id": item_id,
+            "credits_used": 5
+        }
+        
+    except Exception as e:
+        logging.error(f"Reel generation error for job {job_id}: {e}")
+        reel_jobs[job_id]["status"] = "failed"
+        reel_jobs[job_id]["error"] = str(e)
 
 @api_router.post("/reels/generate")
-async def generate_reel_endpoint(request: ReelGenerateRequest, current_user: dict = Depends(get_current_user)):
-    """Generate a complete video reel using FFmpeg"""
-    from reel_generation import generate_reel as create_reel
+async def generate_reel_endpoint(request: ReelGenerateRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Start async reel generation - returns job_id for polling"""
     
     # Get brand profile
     brand = await db.brand_profiles.find_one(
@@ -2030,60 +2099,64 @@ async def generate_reel_endpoint(request: ReelGenerateRequest, current_user: dic
         if not menu_item:
             menu_item = {"name": request.product, "description": ""}
     
-    try:
-        # Generate the reel
-        result = await create_reel(
-            brand_dna=brand_dna,
-            brief=request.brief,
-            style=request.style,
-            language=request.language or "English",
-            menu_item=menu_item
-        )
-        
-        if not result or not result.get("video_base64"):
-            raise HTTPException(status_code=500, detail="Failed to generate reel video")
-        
-        # Deduct 5 credits
-        await db.brand_profiles.update_one(
-            {"user_id": current_user["user_id"]},
-            {"$inc": {"credits_used": 5}}
-        )
-        
-        # Save to library
-        item_id = str(uuid.uuid4())
-        await db.content_library.insert_one({
-            "id": item_id,
-            "user_id": current_user["user_id"],
-            "type": "video",
-            "filename": f"reel_{request.style}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.mp4",
-            "url": f"data:video/mp4;base64,{result['video_base64']}",
-            "source": "reel_generation",
-            "caption": result.get("caption", ""),
-            "hashtags": result.get("hashtags", []),
-            "style": request.style,
-            "duration": result.get("duration", 15),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        })
-        
-        return {
-            "video_base64": result["video_base64"],
-            "caption": result.get("caption", ""),
-            "hashtags": result.get("hashtags", []),
-            "duration": result.get("duration", 15),
-            "style": request.style,
-            "frames_count": result.get("frames_count", 5),
-            "id": item_id,
-            "credits_used": 5,
-            "credits_remaining": credits_remaining - 5
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Reel generation error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate reel: {str(e)}")
+    # Create job
+    job_id = str(uuid.uuid4())
+    reel_jobs[job_id] = {
+        "status": "queued",
+        "progress": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": current_user["user_id"],
+        "style": request.style,
+        "result": None,
+        "error": None
+    }
+    
+    # Start background task
+    background_tasks.add_task(
+        process_reel_generation,
+        job_id,
+        current_user["user_id"],
+        brand_dna,
+        request.brief,
+        request.style,
+        request.language or "English",
+        menu_item
+    )
+    
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Your reel is being created...",
+        "credits_remaining": credits_remaining
+    }
+
+@api_router.get("/reels/status/{job_id}")
+async def get_reel_status(job_id: str, current_user: dict = Depends(get_current_user)):
+    """Poll reel generation status"""
+    if job_id not in reel_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = reel_jobs[job_id]
+    
+    # Verify ownership
+    if job.get("user_id") != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    response = {
+        "job_id": job_id,
+        "status": job["status"],
+        "progress": job["progress"],
+        "style": job.get("style", "cinematic")
+    }
+    
+    if job["status"] == "completed" and job.get("result"):
+        response["result"] = job["result"]
+        # Clean up old jobs after retrieval
+        # del reel_jobs[job_id]  # Keep for a while in case of refresh
+    elif job["status"] == "failed":
+        response["error"] = job.get("error", "Generation failed")
+    
+    return response
 
 # ==================== IDEAS ENGINE ====================
 

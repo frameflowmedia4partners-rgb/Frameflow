@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /root/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+plugins: anyio-4.12.1
+collecting ... collected 18 items
+
+backend/tests/test_bug_fixes_verification.py::TestAsyncReelGeneration::test_reel_generate_returns_job_id_immediately PASSED [  5%]
+backend/tests/test_bug_fixes_verification.py::TestAsyncReelGeneration::test_reel_status_polling_endpoint SKIPPED [ 11%]
+backend/tests/test_bug_fixes_verification.py::TestAdminLogin::test_super_admin_login PASSED [ 16%]
+backend/tests/test_bug_fixes_verification.py::TestAdminDashboard::test_admin_get_stats PASSED [ 22%]
+backend/tests/test_bug_fixes_verification.py::TestAdminDashboard::test_admin_get_clients PASSED [ 27%]
+backend/tests/test_bug_fixes_verification.py::TestAdminCreditManagement::test_get_client_credits PASSED [ 33%]
+backend/tests/test_bug_fixes_verification.py::TestAdminCreditManagement::test_add_bonus_credits PASSED [ 38%]
+backend/tests/test_bug_fixes_verification.py::TestAdminCreditManagement::test_set_credit_limit PASSED [ 44%]
+backend/tests/test_bug_fixes_verification.py::TestAdminCreditManagement::test_reset_credits PASSED [ 50%]
+backend/tests/test_bug_fixes_verification.py::TestAdminCreditManagement::test_credits_overview PASSED [ 55%]
+backend/tests/test_bug_fixes_verification.py::TestContentSwipeImageGeneration::test_content_swipe_generate_images PASSED [ 61%]
+backend/tests/test_bug_fixes_verification.py::TestPhotoshootImageGeneration::test_photoshoot_generate_image PASSED [ 66%]
+backend/tests/test_bug_fixes_verification.py::TestClientDashboardFeatures::test_brand_dna_endpoint PASSED [ 72%]
+backend/tests/test_bug_fixes_verification.py::TestClientDashboardFeatures::test_content_library_endpoint PASSED [ 77%]
+backend/tests/test_bug_fixes_verification.py::TestJWTSessionPersistence::test_jwt_token_valid_for_7_days FAILED [ 83%]
+backend/tests/test_bug_fixes_verification.py::TestJWTSessionPersistence::test_token_works_for_multiple_requests PASSED [ 88%]
+backend/tests/test_bug_fixes_verification.py::TestINRCurrency::test_billing_uses_inr PASSED [ 94%]
+backend/tests/test_bug_fixes_verification.py::TestNoSignupEndpoint::test_no_public_signup PASSED [100%]
+
+=================================== FAILURES ===================================
+__________ TestJWTSessionPersistence.test_jwt_token_valid_for_7_days ___________
+backend/tests/test_bug_fixes_verification.py:370: in test_jwt_token_valid_for_7_days
+    assert login_response.status_code == 200
+E   assert 429 == 200
+E    +  where 429 = <Response [429]>.status_code
+=========================== short test summary info ============================
+FAILED backend/tests/test_bug_fixes_verification.py::TestJWTSessionPersistence::test_jwt_token_valid_for_7_days
+============== 1 failed, 16 passed, 1 skipped in 89.85s (0:01:29) ==============
