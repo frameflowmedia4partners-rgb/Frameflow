@@ -20,6 +20,12 @@ import CloneTemplatePage from "@/pages/CloneTemplatePage";
 import VariationsPage from "@/pages/VariationsPage";
 import PostEditorPage from "@/pages/PostEditorPage";
 import LibraryPage from "@/pages/LibraryPage";
+import ReelGenerationPage from "@/pages/ReelGenerationPage";
+import InspoGalleryPage from "@/pages/InspoGalleryPage";
+import PhotoshootPage from "@/pages/PhotoshootPage";
+import CalendarPage from "@/pages/CalendarPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
+import InboxPage from "@/pages/InboxPage";
 
 // Legacy Pages (keeping for compatibility)
 import DashboardPage from "@/pages/DashboardPage";
@@ -243,7 +249,7 @@ function AppRoutes() {
         path="/inspo"
         element={
           <ClientRoute>
-            <IdeasPage />
+            <InspoGalleryPage />
           </ClientRoute>
         }
       />
@@ -267,7 +273,15 @@ function AppRoutes() {
         path="/create-reel"
         element={
           <ClientRoute>
-            <CreateReelPage />
+            <ReelGenerationPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/photoshoot"
+        element={
+          <ClientRoute>
+            <PhotoshootPage />
           </ClientRoute>
         }
       />
@@ -355,7 +369,7 @@ function AppRoutes() {
         path="/calendar"
         element={
           <ClientRoute>
-            <ContentSchedulerPage />
+            <CalendarPage />
           </ClientRoute>
         }
       />
@@ -363,7 +377,15 @@ function AppRoutes() {
         path="/analytics"
         element={
           <ClientRoute>
-            <AnalyticsDashboard />
+            <AnalyticsPage />
+          </ClientRoute>
+        }
+      />
+      <Route
+        path="/inbox"
+        element={
+          <ClientRoute>
+            <InboxPage />
           </ClientRoute>
         }
       />

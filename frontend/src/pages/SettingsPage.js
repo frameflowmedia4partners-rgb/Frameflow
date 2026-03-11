@@ -1,96 +1,78 @@
-import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import Layout from "@/components/Layout";
-import LoadingSpinner from "@/components/LoadingSpinner";
-import { useAuth } from "@/context/AuthContext";
+import { useState, useEffect, useRef } from "react";
+import ClientLayout from "@/components/ClientLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Palette,
+  Settings,
+  User,
   Link2,
-  Lock,
+  Bell,
   CreditCard,
   Instagram,
-  Facebook,
-  CheckCircle,
-  XCircle,
   Loader2,
-  Upload,
   Save,
+  Upload,
+  Check,
   MessageCircle,
-  AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import api, { brandAPI, billingAPI, integrationAPI, authAPI } from "@/services/api";
+import api from "@/services/api";
+
+const tabs = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "integrations", label: "Integrations", icon: Link2 },
+  { id: "preferences", label: "Preferences", icon: Bell },
+  { id: "billing", label: "Billing", icon: CreditCard },
+];
 
 export default function SettingsPage() {
-  const [searchParams] = useSearchParams();
-  const { user, impersonation } = useAuth();
-  const [activeTab, setActiveTab] = useState("brand");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("profile");
+  const [settings, setSettings] = useState(null);
+  const fileInputRef = useRef(null);
   
-  // Brand state
-  const [brand, setBrand] = useState({
-    name: "",
-    tagline: "",
+  // Form state
+  const [formData, setFormData] = useState({
+    brand_name: "",
+    email: "",
     phone: "",
-    address: "",
-    website_url: "",
+    swiggy_url: "",
+    zomato_url: "",
+    show_delivery_badges: true,
+    default_language: "English",
+    default_post_format: "feed",
+    default_reel_style: "cinematic",
+    notifications_enabled: true,
+    share_to_inspo: false,
   });
-  const [brandDNA, setBrandDNA] = useState(null);
-  
-  // Integration state
-  const [integrationStatus, setIntegrationStatus] = useState(null);
-  const [connecting, setConnecting] = useState(false);
-  
-  // Password state
-  const [passwords, setPasswords] = useState({
-    current: "",
-    new: "",
-    confirm: "",
-  });
-  
-  // Billing state
-  const [billing, setBilling] = useState(null);
 
   useEffect(() => {
-    loadData();
-    
-    // Check for Meta OAuth callback
-    const metaStatus = searchParams.get("meta");
-    if (metaStatus === "connected") {
-      toast.success("Meta accounts connected successfully!");
-    } else if (metaStatus === "error") {
-      toast.error("Failed to connect Meta accounts");
-    }
-  }, [searchParams]);
+    loadSettings();
+  }, []);
 
-  const loadData = async () => {
+  const loadSettings = async () => {
     try {
       setLoading(true);
+      const response = await api.get("/settings");
+      setSettings(response.data);
       
-      const [brandRes, integRes, billRes] = await Promise.all([
-        brandAPI.getCurrent().catch(() => ({ data: null })),
-        integrationAPI.getStatus().catch(() => ({ data: null })),
-        billingAPI.get().catch(() => ({ data: null })),
-      ]);
-      
-      if (brandRes.data) {
-        setBrand({
-          name: brandRes.data.name || "",
-          tagline: brandRes.data.tagline || "",
-          phone: brandRes.data.phone || "",
-          address: brandRes.data.address || "",
-          website_url: brandRes.data.website_url || "",
-        });
-        setBrandDNA(brandRes.data.brand_dna);
-      }
-      
-      setIntegrationStatus(integRes.data);
-      setBilling(billRes.data);
-      
+      // Populate form
+      setFormData({
+        brand_name: response.data?.profile?.brand_name || "",
+        email: response.data?.profile?.email || "",
+        phone: response.data?.profile?.phone || "",
+        swiggy_url: response.data?.integrations?.swiggy_url || "",
+        zomato_url: response.data?.integrations?.zomato_url || "",
+        show_delivery_badges: response.data?.integrations?.show_delivery_badges ?? true,
+        default_language: response.data?.preferences?.default_language || "English",
+        default_post_format: response.data?.preferences?.default_post_format || "feed",
+        default_reel_style: response.data?.preferences?.default_reel_style || "cinematic",
+        notifications_enabled: response.data?.preferences?.notifications_enabled ?? true,
+        share_to_inspo: response.data?.preferences?.share_to_inspo ?? false,
+      });
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -98,117 +80,83 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveBrand = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
-      await brandAPI.updateCurrent(brand);
-      toast.success("Brand settings saved");
+      await api.put("/settings", formData);
+      toast.success("Settings saved!");
+      loadSettings();
     } catch (error) {
-      toast.error("Failed to save settings");
+      const errorMsg = error.response?.data?.detail || "Failed to save settings";
+      toast.error(errorMsg);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleConnectMeta = async () => {
-    setConnecting(true);
-    try {
-      const response = await integrationAPI.getMetaOAuthUrl();
-      
-      if (response.data.setup_required) {
-        toast.info("Meta integration being configured by admin — connect later");
-        setConnecting(false);
-        return;
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const formDataObj = new FormData();
+        formDataObj.append("photo_data", event.target.result);
+        
+        await api.post("/settings/upload-photo", formDataObj, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        
+        toast.success("Photo updated!");
+        loadSettings();
+      } catch (error) {
+        toast.error("Failed to upload photo");
       }
-      
-      if (response.data.oauth_url) {
-        window.location.href = response.data.oauth_url;
-      } else {
-        toast.error("Failed to get OAuth URL");
-        setConnecting(false);
-      }
-    } catch (error) {
-      toast.error("Failed to start connection");
-      setConnecting(false);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleDisconnectMeta = async () => {
-    if (!confirm("Are you sure you want to disconnect your Meta accounts?")) return;
-    
-    try {
-      await integrationAPI.disconnectMeta();
-      toast.success("Meta accounts disconnected");
-      loadData();
-    } catch (error) {
-      toast.error("Failed to disconnect");
-    }
+  const handleWhatsAppContact = () => {
+    window.open("https://wa.me/919330408074?text=Hi, I need help with my Frameflow account", "_blank");
   };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    
-    if (passwords.new !== passwords.confirm) {
-      toast.error("New passwords don't match");
-      return;
-    }
-    
-    if (passwords.new.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    
-    setSaving(true);
-    try {
-      await authAPI.changePassword(passwords.current, passwords.new);
-      toast.success("Password changed successfully");
-      setPasswords({ current: "", new: "", confirm: "" });
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to change password");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const tabs = [
-    { id: "brand", label: "Brand DNA", icon: Palette },
-    { id: "meta", label: "Meta Connection", icon: Link2 },
-    { id: "password", label: "Password", icon: Lock },
-    { id: "billing", label: "Billing", icon: CreditCard },
-  ];
-
-  // Hide password tab during impersonation
-  const visibleTabs = impersonation ? tabs.filter(t => t.id !== "password") : tabs;
-
-  const whatsappLink = "https://wa.me/919330408074?text=" + encodeURIComponent("Hi, I need help with Frameflow settings");
 
   if (loading) {
     return (
-      <Layout>
-        <LoadingSpinner message="Loading settings..." />
-      </Layout>
+      <ClientLayout>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        </div>
+      </ClientLayout>
     );
   }
 
   return (
-    <Layout>
-      <div className="p-8 max-w-5xl mx-auto">
+    <ClientLayout>
+      <div className="p-4 md:p-8 max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold font-outfit text-slate-900 mb-2">Settings</h1>
-          <p className="text-slate-600">Manage your account and brand settings</p>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+              <Settings className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold font-outfit text-slate-900">Settings</h1>
+              <p className="text-slate-600">Manage your account and preferences</p>
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-8 border-b border-slate-100 pb-4">
-          {visibleTabs.map((tab) => (
+        <div className="flex flex-wrap gap-2 mb-8 overflow-x-auto pb-2">
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === tab.id
-                  ? "bg-indigo-100 text-indigo-700"
-                  : "text-slate-600 hover:bg-slate-100"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300"
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -218,338 +166,304 @@ export default function SettingsPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
-          {/* Brand DNA Tab */}
-          {activeTab === "brand" && (
+        <div className="bg-white rounded-2xl p-6 border border-slate-100">
+          {/* Profile Tab */}
+          {activeTab === "profile" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-1">Brand DNA</h2>
-                <p className="text-slate-600 text-sm">Edit your business information and brand settings</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <Label>Business Name</Label>
-                  <Input
-                    value={brand.name}
-                    onChange={(e) => setBrand({ ...brand, name: e.target.value })}
-                    placeholder="Your Café Name"
-                    className="mt-2"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Tagline</Label>
-                  <Input
-                    value={brand.tagline}
-                    onChange={(e) => setBrand({ ...brand, tagline: e.target.value })}
-                    placeholder="Where coffee meets comfort"
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label>Phone</Label>
-                  <Input
-                    value={brand.phone}
-                    onChange={(e) => setBrand({ ...brand, phone: e.target.value })}
-                    placeholder="+91 98765 43210"
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label>Website</Label>
-                  <Input
-                    value={brand.website_url}
-                    onChange={(e) => setBrand({ ...brand, website_url: e.target.value })}
-                    placeholder="https://yourcafe.com"
-                    className="mt-2"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Address</Label>
-                  <Input
-                    value={brand.address}
-                    onChange={(e) => setBrand({ ...brand, address: e.target.value })}
-                    placeholder="Full business address"
-                    className="mt-2"
-                  />
-                </div>
-              </div>
-
-              {/* Brand DNA Preview */}
-              {brandDNA && (
-                <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100">
-                  <h4 className="font-medium text-indigo-900 mb-3">Detected Brand Style</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-indigo-600">Tone:</span>
-                      <span className="ml-2 text-slate-700 capitalize">{brandDNA.brand_tone || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-indigo-600">Logo Position:</span>
-                      <span className="ml-2 text-slate-700">{brandDNA.logo_position || "—"}</span>
-                    </div>
-                    <div>
-                      <span className="text-indigo-600">Font:</span>
-                      <span className="ml-2 text-slate-700">{brandDNA.font_style || "—"}</span>
-                    </div>
-                    {brandDNA.primary_colors && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-indigo-600">Colors:</span>
-                        {brandDNA.primary_colors.slice(0, 4).map((color, i) => (
-                          <div
-                            key={i}
-                            className="w-5 h-5 rounded-full border border-white shadow-sm"
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Profile Information</h3>
+                
+                {/* Photo Upload */}
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="relative">
+                    {settings?.profile?.profile_photo ? (
+                      <img
+                        src={settings.profile.profile_photo}
+                        alt="Profile"
+                        className="w-20 h-20 rounded-2xl object-cover"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-2xl bg-slate-100 flex items-center justify-center">
+                        <User className="w-8 h-8 text-slate-400" />
                       </div>
                     )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      ref={fileInputRef}
+                      className="hidden"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    variant="outline"
+                    className="rounded-full"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Upload Photo
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Brand Name</Label>
+                    <Input
+                      value={formData.brand_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, brand_name: e.target.value }))}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Email</Label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Phone</Label>
+                    <Input
+                      value={formData.phone}
+                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      className="rounded-xl"
+                    />
                   </div>
                 </div>
-              )}
-
-              <Button onClick={handleSaveBrand} disabled={saving} className="rounded-xl">
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Changes
-              </Button>
+              </div>
             </div>
           )}
 
-          {/* Meta Connection Tab */}
-          {activeTab === "meta" && (
+          {/* Integrations Tab */}
+          {activeTab === "integrations" && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-1">Meta Connection</h2>
-                <p className="text-slate-600 text-sm">Connect your Facebook and Instagram accounts</p>
-              </div>
-
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Integrations</h3>
+              
               {/* Instagram */}
-              <div className="p-6 rounded-2xl border border-slate-200">
+              <div className="p-4 border border-slate-200 rounded-xl">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-500 flex items-center justify-center">
-                      <Instagram className="w-7 h-7 text-white" />
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+                      <Instagram className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900">Instagram</h3>
-                      <div className="flex items-center gap-2 text-sm">
-                        {integrationStatus?.instagram?.connected ? (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-green-500" />
-                            <span className="text-green-600">Connected</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-500">Not connected</span>
-                          </>
-                        )}
-                      </div>
+                      <p className="font-medium text-slate-900">Instagram</p>
+                      <p className={`text-sm ${settings?.integrations?.instagram_connected ? "text-green-600" : "text-slate-500"}`}>
+                        {settings?.integrations?.instagram_connected ? "Connected" : "Not connected"}
+                      </p>
                     </div>
                   </div>
-                  {integrationStatus?.instagram?.connected ? (
-                    <Button variant="outline" onClick={handleDisconnectMeta} className="rounded-xl">
-                      Disconnect
-                    </Button>
-                  ) : (
-                    <Button onClick={handleConnectMeta} disabled={connecting} className="rounded-xl bg-gradient-to-r from-pink-500 to-purple-500">
-                      {connecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      Connect
-                    </Button>
-                  )}
-                </div>
-                
-                {/* Connected accounts */}
-                {integrationStatus?.instagram?.accounts?.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-slate-100">
-                    {integrationStatus.instagram.accounts.map((account, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
-                        {account.profile_picture_url ? (
-                          <img src={account.profile_picture_url} alt="" className="w-10 h-10 rounded-full" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-400" />
-                        )}
-                        <div>
-                          <div className="font-medium text-slate-900">@{account.username}</div>
-                          <div className="text-xs text-slate-500">{account.followers_count?.toLocaleString()} followers</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Facebook */}
-              <div className="p-6 rounded-2xl border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center">
-                      <Facebook className="w-7 h-7 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900">Facebook</h3>
-                      <div className="flex items-center gap-2 text-sm">
-                        {integrationStatus?.facebook?.connected ? (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-green-500" />
-                            <span className="text-green-600">Connected</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-500">Not connected</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <Button variant={settings?.integrations?.instagram_connected ? "outline" : "default"} className="rounded-full">
+                    {settings?.integrations?.instagram_connected ? "Disconnect" : "Connect"}
+                  </Button>
                 </div>
               </div>
 
-              {/* Info notice */}
-              <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Connect once, works forever. Your data is private and secure. 
-                  You can revoke access anytime from here or from Meta settings.
-                </p>
+              {/* Delivery URLs */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Swiggy URL</Label>
+                <Input
+                  value={formData.swiggy_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, swiggy_url: e.target.value }))}
+                  placeholder="https://swiggy.com/your-restaurant"
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Zomato URL</Label>
+                <Input
+                  value={formData.zomato_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, zomato_url: e.target.value }))}
+                  placeholder="https://zomato.com/your-restaurant"
+                  className="rounded-xl"
+                />
+              </div>
+
+              {/* Show Delivery Badges */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-slate-900">Show Delivery Badges</p>
+                  <p className="text-sm text-slate-500">Display Swiggy & Zomato badges on posts</p>
+                </div>
+                <button
+                  onClick={() => setFormData(prev => ({ ...prev, show_delivery_badges: !prev.show_delivery_badges }))}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    formData.show_delivery_badges ? "bg-indigo-600" : "bg-slate-300"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                    formData.show_delivery_badges ? "translate-x-6" : "translate-x-0.5"
+                  }`} />
+                </button>
               </div>
             </div>
           )}
 
-          {/* Password Tab */}
-          {activeTab === "password" && !impersonation && (
+          {/* Preferences Tab */}
+          {activeTab === "preferences" && (
             <div className="space-y-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Preferences</h3>
+              
+              {/* Language */}
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-1">Change Password</h2>
-                <p className="text-slate-600 text-sm">Update your account password</p>
+                <Label className="text-sm font-medium mb-2 block">Default Language</Label>
+                <div className="flex gap-2">
+                  {["English", "Hindi", "Bengali"].map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setFormData(prev => ({ ...prev, default_language: lang }))}
+                      className={`px-4 py-2 rounded-full text-sm font-medium ${
+                        formData.default_language === lang
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-                <div>
-                  <Label>Current Password</Label>
-                  <Input
-                    type="password"
-                    value={passwords.current}
-                    onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                    required
-                    className="mt-2"
-                  />
+              {/* Default Post Format */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Default Post Format</Label>
+                <div className="flex gap-2">
+                  {["feed", "story"].map((format) => (
+                    <button
+                      key={format}
+                      onClick={() => setFormData(prev => ({ ...prev, default_post_format: format }))}
+                      className={`px-4 py-2 rounded-full text-sm font-medium capitalize ${
+                        formData.default_post_format === format
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {format}
+                    </button>
+                  ))}
                 </div>
-                <div>
-                  <Label>New Password</Label>
-                  <Input
-                    type="password"
-                    value={passwords.new}
-                    onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
-                    required
-                    minLength={6}
-                    className="mt-2"
-                  />
+              </div>
+
+              {/* Default Reel Style */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Default Reel Style</Label>
+                <div className="flex gap-2">
+                  {["cinematic", "casual"].map((style) => (
+                    <button
+                      key={style}
+                      onClick={() => setFormData(prev => ({ ...prev, default_reel_style: style }))}
+                      className={`px-4 py-2 rounded-full text-sm font-medium capitalize ${
+                        formData.default_reel_style === style
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {style}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* Notifications */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                 <div>
-                  <Label>Confirm New Password</Label>
-                  <Input
-                    type="password"
-                    value={passwords.confirm}
-                    onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
-                    required
-                    minLength={6}
-                    className="mt-2"
-                  />
+                  <p className="font-medium text-slate-900">Email Notifications</p>
+                  <p className="text-sm text-slate-500">Receive updates and alerts via email</p>
                 </div>
-                <Button type="submit" disabled={saving} className="rounded-xl">
-                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Change Password
-                </Button>
-              </form>
+                <button
+                  onClick={() => setFormData(prev => ({ ...prev, notifications_enabled: !prev.notifications_enabled }))}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    formData.notifications_enabled ? "bg-indigo-600" : "bg-slate-300"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                    formData.notifications_enabled ? "translate-x-6" : "translate-x-0.5"
+                  }`} />
+                </button>
+              </div>
+
+              {/* Share to Inspo */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                <div>
+                  <p className="font-medium text-slate-900">Share to Inspiration Gallery</p>
+                  <p className="text-sm text-slate-500">Allow your posts to appear in public gallery</p>
+                </div>
+                <button
+                  onClick={() => setFormData(prev => ({ ...prev, share_to_inspo: !prev.share_to_inspo }))}
+                  className={`w-12 h-6 rounded-full transition-colors ${
+                    formData.share_to_inspo ? "bg-indigo-600" : "bg-slate-300"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                    formData.share_to_inspo ? "translate-x-6" : "translate-x-0.5"
+                  }`} />
+                </button>
+              </div>
             </div>
           )}
 
           {/* Billing Tab */}
           {activeTab === "billing" && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-1">Billing</h2>
-                <p className="text-slate-600 text-sm">View your plan and payment status</p>
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Billing & Credits</h3>
+              
+              {/* Credits Info */}
+              <div className="p-6 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl text-white">
+                <p className="text-white/80 mb-2">Credits Used This Month</p>
+                <div className="flex items-end gap-2 mb-4">
+                  <span className="text-5xl font-bold">{settings?.billing?.credits_used || 0}</span>
+                  <span className="text-white/80 text-xl mb-1">/ {settings?.billing?.monthly_credits || 250}</span>
+                </div>
+                <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white transition-all"
+                    style={{ width: `${((settings?.billing?.credits_used || 0) / (settings?.billing?.monthly_credits || 250)) * 100}%` }}
+                  />
+                </div>
+                <p className="text-white/60 text-sm mt-2">
+                  Credits reset monthly
+                </p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
-                <h3 className="text-lg font-semibold mb-1">{billing?.plan || "Frameflow Professional"}</h3>
-                <p className="text-white/80">Monthly subscription</p>
-                <div className="text-3xl font-bold mt-4">₹{billing?.monthly_fee?.toLocaleString() || "15,000"}<span className="text-lg font-normal">/month</span></div>
+              {/* Contact */}
+              <div className="p-4 border border-slate-200 rounded-xl">
+                <h4 className="font-medium text-slate-900 mb-2">Need more credits?</h4>
+                <p className="text-slate-600 text-sm mb-4">
+                  Contact your account manager to discuss upgrading your plan.
+                </p>
+                <Button
+                  onClick={handleWhatsAppContact}
+                  className="rounded-full bg-green-500 hover:bg-green-600"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Contact on WhatsApp
+                </Button>
               </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-slate-50">
-                  <div className="text-sm text-slate-500">Plan Start</div>
-                  <div className="font-semibold text-slate-900">
-                    {billing?.plan_start ? new Date(billing.plan_start).toLocaleDateString() : "—"}
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-50">
-                  <div className="text-sm text-slate-500">Next Due Date</div>
-                  <div className="font-semibold text-slate-900">
-                    {billing?.current_billing?.due_date ? new Date(billing.current_billing.due_date).toLocaleDateString() : "—"}
-                  </div>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-50">
-                  <div className="text-sm text-slate-500">Payment Status</div>
-                  <div className="font-semibold">
-                    {billing?.current_billing?.status === "paid" ? (
-                      <span className="text-green-600">Paid ✅</span>
-                    ) : (
-                      <span className="text-amber-600">Unpaid ⏳</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment History */}
-              {billing?.history?.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-3">Payment History</h4>
-                  <div className="space-y-2">
-                    {billing.history.map((payment, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
-                        <div>
-                          <div className="font-medium text-slate-900">₹{payment.amount?.toLocaleString()}</div>
-                          <div className="text-xs text-slate-500">
-                            {new Date(payment.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          payment.status === "paid" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"
-                        }`}>
-                          {payment.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {/* Save Button */}
+          {activeTab !== "billing" && (
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <Button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-full bg-indigo-600 px-8"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Save Changes
+              </Button>
             </div>
           )}
         </div>
-
-        {/* Support Section */}
-        <div className="mt-8 p-6 rounded-2xl bg-green-50 border border-green-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-green-900">Need help with settings?</h3>
-              <p className="text-sm text-green-700">Chat with us on WhatsApp for quick support</p>
-            </div>
-            <a
-              href={whatsappLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Chat on WhatsApp
-            </a>
-          </div>
-        </div>
       </div>
-    </Layout>
+    </ClientLayout>
   );
 }

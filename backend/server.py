@@ -32,6 +32,7 @@ from ai_generation import (
     chat_with_ai,
     composite_post_image
 )
+from reel_generation import generate_reel
 from cryptography.fernet import Fernet
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -237,6 +238,47 @@ class PostGenerateRequest(BaseModel):
     platform: str = "instagram"
     tone: Optional[str] = None
     additional_instructions: Optional[str] = None
+
+class ReelGenerateRequestNew(BaseModel):
+    style: str = "cinematic"  # cinematic, casual
+    menu_item_id: Optional[str] = None
+    brief: Optional[str] = None
+    music_choice: str = "auto"  # auto, upload
+    language: str = "English"  # English, Hindi, Bengali
+
+class PhotoshootRequest(BaseModel):
+    menu_item_id: Optional[str] = None
+    product_name: Optional[str] = None
+    brief: Optional[str] = None
+
+class SchedulePostRequest(BaseModel):
+    library_item_id: str
+    scheduled_date: str
+    scheduled_time: str
+    platform: str = "instagram_feed"  # instagram_feed, instagram_story, instagram_reel
+    caption: str
+    hashtags: List[str] = []
+    status: str = "scheduled"  # scheduled, draft
+
+class InspoCloneRequest(BaseModel):
+    post_id: str
+
+class SettingsUpdateRequest(BaseModel):
+    # Profile
+    brand_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    # Integrations
+    swiggy_url: Optional[str] = None
+    zomato_url: Optional[str] = None
+    show_delivery_badges: Optional[bool] = None
+    # Preferences
+    default_language: Optional[str] = None
+    default_post_format: Optional[str] = None
+    default_reel_style: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+    # DNA sharing
+    share_to_inspo: Optional[bool] = None
 
 # ==================== ENCRYPTION HELPERS ====================
 
@@ -2311,6 +2353,537 @@ async def get_user_stats(current_user: dict = Depends(get_current_user)):
         "saved_ideas": ideas_count,
         "media_files": media_count
     }
+
+# ==================== REEL GENERATION (NEW) ====================
+
+@api_router.post("/reel/generate")
+async def generate_reel_endpoint(request: ReelGenerateRequestNew, current_user: dict = Depends(get_current_user)):
+    """Generate a video reel"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Check credits (reels cost 5 credits)
+    credits_remaining = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    if credits_remaining < 5:
+        raise HTTPException(status_code=403, detail="Monthly credit limit reached. Reels cost 5 credits.")
+    
+    # Get menu item
+    menu_item = None
+    if request.menu_item_id and brand.get("menu_items"):
+        for item in brand.get("menu_items", []):
+            if item.get("id") == request.menu_item_id or item.get("name") == request.menu_item_id:
+                menu_item = item
+                break
+    
+    if not menu_item and brand.get("menu_items"):
+        menu_item = brand.get("menu_items", [{}])[0]
+    
+    brief = request.brief or f"Create a {request.style} reel showcasing {menu_item.get('name', 'our specialty') if menu_item else 'our café'}"
+    
+    try:
+        result = await generate_reel(
+            brand_dna=brand,
+            brief=brief,
+            style=request.style,
+            language=request.language,
+            menu_item=menu_item
+        )
+        
+        # Deduct 5 credits
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$inc": {"credits_used": 5}}
+        )
+        
+        # Save to library
+        await db.content_library.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": current_user["user_id"],
+            "type": "video",
+            "filename": f"reel_{request.style}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.mp4",
+            "url": f"data:video/mp4;base64,{result['video_base64']}",
+            "caption": result['caption'],
+            "hashtags": result['hashtags'],
+            "source": "ai_generated",
+            "style": request.style,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {
+            "success": True,
+            "video_base64": result['video_base64'],
+            "caption": result['caption'],
+            "hashtags": result['hashtags'],
+            "duration": result['duration'],
+            "credits_used": 5,
+            "credits_remaining": credits_remaining - 5
+        }
+        
+    except Exception as e:
+        logging.error(f"Reel generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate reel: {str(e)}")
+
+# ==================== PHOTOSHOOT MODE ====================
+
+@api_router.post("/photoshoot/generate")
+async def generate_photoshoot(request: PhotoshootRequest, current_user: dict = Depends(get_current_user)):
+    """Generate AI product photography"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Check credits
+    credits_remaining = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    if credits_remaining < 1:
+        raise HTTPException(status_code=403, detail="Monthly credit limit reached")
+    
+    # Get product name
+    product_name = request.product_name
+    if not product_name and request.menu_item_id and brand.get("menu_items"):
+        for item in brand.get("menu_items", []):
+            if item.get("id") == request.menu_item_id or item.get("name") == request.menu_item_id:
+                product_name = item.get("name")
+                break
+    
+    if not product_name:
+        product_name = "Signature Coffee"
+    
+    brief = request.brief or ""
+    
+    # Generate image
+    try:
+        image_bytes = await generate_image_dalle(
+            f"Professional product photography of {product_name}. {brief}. Clean, high-end, commercial quality, natural lighting, NO text, NO logos, NO watermarks."
+        )
+        
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Deduct 1 credit
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$inc": {"credits_used": 1}}
+        )
+        
+        # Save to library
+        item_id = str(uuid.uuid4())
+        await db.content_library.insert_one({
+            "id": item_id,
+            "user_id": current_user["user_id"],
+            "type": "image",
+            "filename": f"photoshoot_{product_name.lower().replace(' ', '_')}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.png",
+            "url": f"data:image/png;base64,{image_base64}",
+            "source": "photoshoot",
+            "product_name": product_name,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {
+            "success": True,
+            "image_base64": image_base64,
+            "id": item_id,
+            "product_name": product_name,
+            "credits_used": 1,
+            "credits_remaining": credits_remaining - 1
+        }
+        
+    except Exception as e:
+        logging.error(f"Photoshoot error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate photo: {str(e)}")
+
+# ==================== INSPO GALLERY ====================
+
+@api_router.get("/inspo/gallery")
+async def get_inspo_gallery(category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Get public inspiration gallery from all brands that opted in"""
+    query = {"share_to_inspo": True}
+    
+    if category and category != "all":
+        query["niche"] = category
+    
+    # Get all shared posts
+    shared_posts = await db.inspo_gallery.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # If no posts, return placeholder message
+    if not shared_posts:
+        return {
+            "posts": [],
+            "message": "Inspiration gallery fills up as brands create and share content. Check back soon!"
+        }
+    
+    return {"posts": shared_posts}
+
+@api_router.post("/inspo/clone")
+async def clone_inspo_post(request: InspoCloneRequest, current_user: dict = Depends(get_current_user)):
+    """Clone a post from inspo gallery and rebrand with user's DNA"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand:
+        raise HTTPException(status_code=400, detail="Please complete Brand DNA setup first")
+    
+    # Check credits
+    credits_remaining = brand.get("monthly_credits", 250) - brand.get("credits_used", 0)
+    if credits_remaining < 1:
+        raise HTTPException(status_code=403, detail="Monthly credit limit reached")
+    
+    # Get the inspo post
+    inspo_post = await db.inspo_gallery.find_one({"id": request.post_id}, {"_id": 0})
+    if not inspo_post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    # Generate rebranded version
+    try:
+        result = await generate_concept_post(
+            brand_dna=brand,
+            product=inspo_post.get("product_name", "Signature Item"),
+            format_size="feed",
+            angle=inspo_post.get("angle", "promotion"),
+            brief=f"Rebrand this concept: {inspo_post.get('caption', '')}",
+            language=brand.get("language", "English")
+        )
+        
+        # Deduct 1 credit
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$inc": {"credits_used": 1}}
+        )
+        
+        return {
+            "success": True,
+            **result,
+            "credits_used": 1,
+            "credits_remaining": credits_remaining - 1
+        }
+        
+    except Exception as e:
+        logging.error(f"Inspo clone error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clone post: {str(e)}")
+
+@api_router.post("/inspo/share")
+async def share_to_inspo(item_id: str, current_user: dict = Depends(get_current_user)):
+    """Share a library item to the public inspo gallery"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    if not brand or not brand.get("share_to_inspo"):
+        raise HTTPException(status_code=403, detail="Please enable sharing in your DNA settings")
+    
+    # Get the library item
+    item = await db.content_library.find_one({
+        "id": item_id,
+        "user_id": current_user["user_id"]
+    }, {"_id": 0})
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Add to inspo gallery
+    inspo_doc = {
+        "id": str(uuid.uuid4()),
+        "original_id": item_id,
+        "url": item.get("url"),
+        "caption": item.get("caption", ""),
+        "niche": brand.get("niches", ["cafe"])[0] if brand.get("niches") else "cafe",
+        "brand_type": brand.get("type", "cafe"),
+        "share_to_inspo": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.inspo_gallery.insert_one(inspo_doc)
+    
+    return {"success": True, "inspo_id": inspo_doc["id"]}
+
+# ==================== CALENDAR / SCHEDULER ====================
+
+@api_router.get("/calendar/posts")
+async def get_calendar_posts(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get scheduled posts for calendar view"""
+    now = datetime.now(timezone.utc)
+    target_month = month or now.month
+    target_year = year or now.year
+    
+    # Build date range query
+    start_date = datetime(target_year, target_month, 1, tzinfo=timezone.utc)
+    if target_month == 12:
+        end_date = datetime(target_year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end_date = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
+    
+    posts = await db.scheduled_posts.find({
+        "user_id": current_user["user_id"],
+        "scheduled_date": {
+            "$gte": start_date.isoformat(),
+            "$lt": end_date.isoformat()
+        }
+    }, {"_id": 0}).to_list(100)
+    
+    return {"posts": posts, "month": target_month, "year": target_year}
+
+@api_router.post("/calendar/schedule")
+async def schedule_post(request: SchedulePostRequest, current_user: dict = Depends(get_current_user)):
+    """Schedule a post from library"""
+    # Get the library item
+    item = await db.content_library.find_one({
+        "id": request.library_item_id,
+        "user_id": current_user["user_id"]
+    }, {"_id": 0})
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Library item not found")
+    
+    # Create scheduled post
+    post_id = str(uuid.uuid4())
+    scheduled_post = {
+        "id": post_id,
+        "user_id": current_user["user_id"],
+        "library_item_id": request.library_item_id,
+        "media_url": item.get("url"),
+        "scheduled_date": request.scheduled_date,
+        "scheduled_time": request.scheduled_time,
+        "platform": request.platform,
+        "caption": request.caption,
+        "hashtags": request.hashtags,
+        "status": request.status,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.scheduled_posts.insert_one(scheduled_post)
+    
+    return {"success": True, "post_id": post_id}
+
+@api_router.put("/calendar/posts/{post_id}")
+async def update_scheduled_post(post_id: str, request: SchedulePostRequest, current_user: dict = Depends(get_current_user)):
+    """Update a scheduled post"""
+    result = await db.scheduled_posts.update_one(
+        {"id": post_id, "user_id": current_user["user_id"]},
+        {"$set": {
+            "scheduled_date": request.scheduled_date,
+            "scheduled_time": request.scheduled_time,
+            "platform": request.platform,
+            "caption": request.caption,
+            "hashtags": request.hashtags,
+            "status": request.status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    return {"success": True}
+
+@api_router.delete("/calendar/posts/{post_id}")
+async def delete_scheduled_post_calendar(post_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a scheduled post"""
+    result = await db.scheduled_posts.delete_one({
+        "id": post_id,
+        "user_id": current_user["user_id"]
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    return {"success": True}
+
+# ==================== ANALYTICS PAGE ====================
+
+@api_router.get("/analytics/dashboard")
+async def get_analytics_dashboard(current_user: dict = Depends(get_current_user)):
+    """Get analytics dashboard data"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    
+    # Check Meta connection
+    meta_connected = brand.get("meta_connected_at") is not None if brand else False
+    
+    # Get posts published this month
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    posts_this_month = await db.scheduled_posts.count_documents({
+        "user_id": current_user["user_id"],
+        "status": "published",
+        "published_at": {"$gte": month_start.isoformat()}
+    })
+    
+    # Get best performing post (or placeholder)
+    best_post = await db.content_library.find_one({
+        "user_id": current_user["user_id"],
+        "source": "ai_generated"
+    }, {"_id": 0}, sort=[("created_at", -1)])
+    
+    # Credits info
+    credits_used = brand.get("credits_used", 0) if brand else 0
+    monthly_credits = brand.get("monthly_credits", 250) if brand else 250
+    credits_reset = brand.get("credits_reset_date") if brand else None
+    
+    if meta_connected:
+        # TODO: Fetch real analytics from Meta Graph API
+        return {
+            "meta_connected": True,
+            "posts_this_month": posts_this_month,
+            "total_reach": 15420,  # Placeholder
+            "total_engagement": 892,  # Placeholder
+            "best_post": best_post,
+            "credits_used": credits_used,
+            "monthly_credits": monthly_credits,
+            "credits_reset_date": credits_reset
+        }
+    else:
+        # Demo data
+        return {
+            "meta_connected": False,
+            "message": "Connect Instagram to see real analytics",
+            "demo_data": {
+                "posts_this_month": 12,
+                "total_reach": "8,54,200",
+                "total_engagement": "45,890",
+                "engagement_rate": "5.4%"
+            },
+            "credits_used": credits_used,
+            "monthly_credits": monthly_credits,
+            "credits_reset_date": credits_reset,
+            "best_post": best_post
+        }
+
+# ==================== INBOX ====================
+
+@api_router.get("/inbox")
+async def get_inbox(current_user: dict = Depends(get_current_user)):
+    """Get Instagram inbox (comments + DMs)"""
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    
+    meta_connected = brand.get("meta_connected_at") is not None if brand else False
+    
+    if not meta_connected:
+        return {
+            "connected": False,
+            "message": "Connect Instagram to manage your comments and DMs in one place",
+            "comments": [],
+            "messages": []
+        }
+    
+    # TODO: Fetch real data from Meta Graph API
+    return {
+        "connected": True,
+        "comments": [],
+        "messages": []
+    }
+
+# ==================== SETTINGS PAGE ====================
+
+@api_router.get("/settings")
+async def get_settings(current_user: dict = Depends(get_current_user)):
+    """Get user settings"""
+    user = await db.users.find_one({"id": current_user["user_id"]}, {"_id": 0, "password_hash": 0})
+    brand = await db.brand_profiles.find_one({"user_id": current_user["user_id"]}, {"_id": 0})
+    
+    # Check Meta connection
+    meta_connected = brand.get("meta_connected_at") is not None if brand else False
+    
+    return {
+        "profile": {
+            "brand_name": brand.get("name") if brand else "",
+            "email": user.get("email") if user else "",
+            "phone": brand.get("phone") if brand else "",
+            "profile_photo": brand.get("logo_url") if brand else ""
+        },
+        "integrations": {
+            "instagram_connected": meta_connected,
+            "instagram_accounts": brand.get("instagram_accounts", []) if brand else [],
+            "swiggy_url": brand.get("swiggy_url") if brand else "",
+            "zomato_url": brand.get("zomato_url") if brand else "",
+            "show_delivery_badges": brand.get("show_delivery_badges", True) if brand else True
+        },
+        "preferences": {
+            "default_language": brand.get("language", "English") if brand else "English",
+            "default_post_format": brand.get("default_post_format", "feed") if brand else "feed",
+            "default_reel_style": brand.get("default_reel_style", "cinematic") if brand else "cinematic",
+            "notifications_enabled": user.get("notifications_enabled", True) if user else True,
+            "share_to_inspo": brand.get("share_to_inspo", False) if brand else False
+        },
+        "billing": {
+            "credits_used": brand.get("credits_used", 0) if brand else 0,
+            "monthly_credits": brand.get("monthly_credits", 250) if brand else 250,
+            "credits_reset_date": brand.get("credits_reset_date") if brand else None
+        }
+    }
+
+@api_router.put("/settings")
+async def update_settings(request: SettingsUpdateRequest, current_user: dict = Depends(get_current_user)):
+    """Update user settings"""
+    user_updates = {}
+    brand_updates = {}
+    
+    if request.brand_name is not None:
+        brand_updates["name"] = request.brand_name
+        user_updates["full_name"] = request.brand_name
+    
+    if request.email is not None:
+        # Check if email is already in use
+        existing = await db.users.find_one({"email": request.email, "id": {"$ne": current_user["user_id"]}})
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        user_updates["email"] = request.email
+    
+    if request.phone is not None:
+        brand_updates["phone"] = request.phone
+    
+    if request.swiggy_url is not None:
+        brand_updates["swiggy_url"] = request.swiggy_url
+    
+    if request.zomato_url is not None:
+        brand_updates["zomato_url"] = request.zomato_url
+    
+    if request.show_delivery_badges is not None:
+        brand_updates["show_delivery_badges"] = request.show_delivery_badges
+    
+    if request.default_language is not None:
+        brand_updates["language"] = request.default_language
+    
+    if request.default_post_format is not None:
+        brand_updates["default_post_format"] = request.default_post_format
+    
+    if request.default_reel_style is not None:
+        brand_updates["default_reel_style"] = request.default_reel_style
+    
+    if request.notifications_enabled is not None:
+        user_updates["notifications_enabled"] = request.notifications_enabled
+    
+    if request.share_to_inspo is not None:
+        brand_updates["share_to_inspo"] = request.share_to_inspo
+    
+    # Apply updates
+    if user_updates:
+        user_updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.users.update_one({"id": current_user["user_id"]}, {"$set": user_updates})
+    
+    if brand_updates:
+        brand_updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.brand_profiles.update_one(
+            {"user_id": current_user["user_id"]},
+            {"$set": brand_updates},
+            upsert=True
+        )
+    
+    return {"success": True}
+
+@api_router.post("/settings/upload-photo")
+async def upload_profile_photo(
+    current_user: dict = Depends(get_current_user),
+    photo_data: str = Form(...)
+):
+    """Upload profile/logo photo"""
+    await db.brand_profiles.update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": {
+            "logo_url": photo_data,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"success": True}
 
 # ==================== APP SETUP ====================
 
