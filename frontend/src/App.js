@@ -48,6 +48,7 @@ import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
 import DataDeletionPage from "@/pages/DataDeletionPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminBillingPage from "@/pages/AdminBillingPage";
+import AdminCreditManagement from "@/pages/AdminCreditManagement";
 import SettingsPage from "@/pages/SettingsPage";
 
 // Protected Route for authenticated users
@@ -192,6 +193,22 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminDashboard />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/credits"
+        element={
+          <AdminRoute>
+            <AdminCreditManagement />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/credits/:clientId"
+        element={
+          <AdminRoute>
+            <AdminCreditManagement />
           </AdminRoute>
         }
       />

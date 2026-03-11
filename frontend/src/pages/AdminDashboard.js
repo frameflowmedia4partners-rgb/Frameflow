@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/services/api";
@@ -236,6 +237,38 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            onClick={() => navigate("/admin/credits")}
+            className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-2xl p-5 text-left hover:from-indigo-600 hover:to-purple-700 transition-all"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-semibold text-lg">Credit Management</span>
+            </div>
+            <p className="text-sm text-white/80">
+              Manage client credits, add bonuses, set limits, and view usage history
+            </p>
+          </button>
+          <button
+            onClick={() => navigate("/admin/billing")}
+            className="bg-white border border-slate-200 text-slate-900 rounded-2xl p-5 text-left hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-green-600" />
+              </div>
+              <span className="font-semibold text-lg">Billing & Payments</span>
+            </div>
+            <p className="text-sm text-slate-600">
+              Track payments, mark invoices as paid, view payment history
+            </p>
+          </button>
+        </div>
 
         {/* Search */}
         <div className="mb-6">

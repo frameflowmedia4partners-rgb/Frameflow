@@ -642,7 +642,7 @@ async def admin_get_client_credits(client_id: str, admin_user: dict = Depends(ge
     
     # Get credit history
     credit_history = await db.credit_history.find(
-        {"user_id": client_id}
+        {"user_id": client_id}, {"_id": 0}
     ).sort("timestamp", -1).limit(50).to_list(50)
     
     return {
